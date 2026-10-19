@@ -280,11 +280,18 @@ def draw_settings(fb, fonts, rows, cursor, state=None):
                 fb.fill_rect(bx + 3, by + 3, size - 6, size - 6, ink)
         y += row_h
     _footer(fb, fonts, "▲▼ move   ● change   hold ● back   ▲+▼ save")
-    fy = HEIGHT - FOOTER_H + (FOOTER_H - fonts.small.height) // 2
+    # Scroll hints: small arrows in the right margin by the first and last visible rows
     if first > 0:
-        nfont.draw(fb, fonts.small, "▲", 2, fy)
+        _small_arrow(fb, WIDTH - 7, top + 4, up=True)
     if first + visible < len(rows):
-        nfont.draw_right(fb, fonts.small, "▼", WIDTH - 2, fy)
+        _small_arrow(fb, WIDTH - 7, y - 8, up=False)
+
+
+def _small_arrow(fb, x, y, up):
+    """A 7x4 triangle centred on x, pointing up or down from y."""
+    for i in range(4):
+        w = 1 + 2 * (3 - i) if up else 1 + 2 * i
+        fb.fill_rect(x - w // 2, y + i, w, 1, BLACK)
 
 
 def draw_message(fb, fonts, title, lines, footer=None, state=None):
