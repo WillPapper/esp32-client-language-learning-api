@@ -49,7 +49,7 @@ installed.
 | `es8311.py` | Minimal ES8311 register driver (playback only) |
 | `buttons.py` | Polled buttons with tap / hold detection |
 | `battery.py` | Battery voltage (ADC on GPIO 4), percent and charging state (GPIO 2 / GPIO 1) |
-| `note4_epd.py` | E-paper driver (full refresh only, about 1.2 s) |
+| `note4_epd.py` | E-paper driver: partial refresh (about 0.8 s), full every 10 partials or on request |
 | `wifi.py` | `wifi.connect()` with readable errors |
 | `fonts/` | Noto Sans CJK JP and SC rendered to bitmaps at 40, 22 and 16 px (SIL OFL 1.1) |
 | `tools/deploy.sh` | Copy everything to the device and reset it |
