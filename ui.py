@@ -279,7 +279,7 @@ def draw_settings(fb, fonts, rows, cursor, state=None, hint="● change"):
             if checked:
                 fb.fill_rect(bx + 3, by + 3, size - 6, size - 6, ink)
         y += row_h
-    _footer(fb, fonts, "▲▼ move   " + hint + "   ▲+▼ save")
+    _footer(fb, fonts, "▲▼ move  " + hint + "  ▲+▼ save")
     # Scroll hints: small arrows in the right margin by the first and last visible rows
     if first > 0:
         _small_arrow(fb, WIDTH - 7, top + 4, up=True)

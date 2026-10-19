@@ -553,7 +553,7 @@ class App:
             chosen = []
         self.settings["levels"][lang] = chosen
 
-    HINTS = {"volume": "● louder   hold ● quieter", "sleep": "● longer   hold ● shorter",
+    HINTS = {"volume": "● louder  hold ● quieter", "sleep": "● longer  hold ● shorter",
              "reveal": "● on / off", "level": "● check / uncheck"}
 
     def show_settings(self):

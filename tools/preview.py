@@ -41,7 +41,7 @@ def main(argv):
                 ("Mandarin levels  (switch language on a card first)", None, None),
                 ("HSK1  (158 words)", None, True), ("HSK2  (2 words)", None, False),
                 ("HSK3.0-1  (508 words)", None, True), ("HSK2025-1  (600 words)", None, True)]
-        ui.draw_settings(fb, fonts, rows, 0, state, "● louder   hold ● quieter")
+        ui.draw_settings(fb, fonts, rows, 0, state, "● louder  hold ● quieter")
     elif "--message" in flags:
         state["battery"] = {"percent": 20, "charging": False, "full": False, "mv": 3600}
         state["online"] = False
