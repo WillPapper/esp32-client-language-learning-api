@@ -146,8 +146,13 @@ def _footer(fb, fonts, text):
 
 
 def _lines(fb, font, text, y, limit, max_lines, centered=False, x=MARGIN):
-    """Draw wrapped text from y downwards, stopping at `limit`. Returns the next y."""
-    for line in nfont.wrap(font, text, WIDTH - 2 * MARGIN)[:max_lines]:
+    """Draw wrapped text from y downwards, at most max_lines and stopping at `limit`; a cut
+    is marked with an ellipsis. Returns the next y."""
+    lines = nfont.wrap(font, text, WIDTH - 2 * MARGIN)
+    if len(lines) > max_lines:
+        lines = lines[:max_lines]
+        lines[-1] = nfont.fit(font, lines[-1] + "…", WIDTH - 2 * MARGIN)
+    for line in lines:
         if y + font.height > limit:
             break
         if centered:
@@ -158,18 +163,41 @@ def _lines(fb, font, text, y, limit, max_lines, centered=False, x=MARGIN):
     return y
 
 
-def _sentence_block(fonts, language, s):
-    """[(font, lines)] for one example sentence: text, its reading(s), translation."""
+def _sentence_block(fonts, language, s, max_h=None):
+    """[(font, lines)] for one example sentence: text, its reading(s), translation. With
+    `max_h`, the fullest version that fits in that height: first the romaji goes, then the
+    reading and translation are cut to one line each, then the reading goes, and as a last
+    resort only the sentence itself is kept (cut to one line)."""
     max_w = WIDTH - 2 * MARGIN
-    block = [(fonts.body, nfont.wrap(fonts.body, s.get("characters") or "", max_w)[:2])]
+    text = s.get("characters") or ""
     if language == "zh":
-        readings = [s.get("pinyin")]
+        kana, romaji = s.get("pinyin"), None
     else:
-        readings = [s.get("kana"), s.get("romaji")]
-    for text in readings:
-        if text:
-            block.append((fonts.small, nfont.wrap(fonts.small, text, max_w)[:2]))
-    block.append((fonts.small, nfont.wrap(fonts.small, s.get("translation") or "", max_w)[:2]))
+        kana, romaji = s.get("kana"), s.get("romaji")
+    translation = s.get("translation") or ""
+
+    def wrap(font, t, n):
+        lines = nfont.wrap(font, t, max_w)
+        if len(lines) > n:
+            lines = lines[:n]
+            lines[-1] = nfont.fit(font, lines[-1] + "…", max_w)
+        return lines
+
+    def build(text_lines, kana_lines, romaji_lines, tr_lines):
+        block = [(fonts.body, wrap(fonts.body, text, text_lines))]
+        if kana and kana_lines:
+            block.append((fonts.small, wrap(fonts.small, kana, kana_lines)))
+        if romaji and romaji_lines:
+            block.append((fonts.small, wrap(fonts.small, romaji, romaji_lines)))
+        if tr_lines:
+            block.append((fonts.small, wrap(fonts.small, translation, tr_lines)))
+        return block
+
+    variants = ((2, 2, 2, 2), (2, 2, 0, 2), (2, 1, 0, 1), (2, 0, 0, 1), (1, 0, 0, 1), (1, 0, 0, 0))
+    for v in variants:
+        block = build(*v)
+        if max_h is None or sum(font.height * len(lines) for font, lines in block) <= max_h:
+            return block
     return block
 
 
@@ -223,9 +251,10 @@ def draw_word(fb, fonts, word, language, position, total, status=None, state=Non
         # One example sentence: the one chosen at random when the word was fetched (its
         # audio is what a tap plays); hold "down" cycles to the next.
         index = word.get("sentence", 0) % len(sentences)
-        block = _sentence_block(fonts, language, sentences[index])
         several = len(sentences) > 1
-        height = (16 if several else 10) + sum(font.height * len(lines) for font, lines in block)
+        gap = 16 if several else 10
+        block = _sentence_block(fonts, language, sentences[index], limit - y - gap)
+        height = gap + sum(font.height * len(lines) for font, lines in block)
         if y + height <= limit:
             y += 10 if several else 4
             right = WIDTH - MARGIN - 40
