@@ -2,7 +2,7 @@
 
     Up button (GPIO 39)     next word; a new random word when at the end of the history
     Down button (GPIO 18)   previous word
-    Main button tap (GPIO 0) speak the word (the API's text-to-speech WAV)
+    Main button tap (GPIO 0) speak the word, then after a short pause its first example sentence
     Main button hold        switch between Japanese and Mandarin (each keeps its own history)
 
 Only one language is shown at a time.
@@ -32,7 +32,7 @@ POLL_MS = 10
 # the oldest is dropped beyond this. Audio is streamed on each tap and never stored.
 HISTORY_LIMIT = 200
 PREFETCH_WAIT_MS = 25_000
-AUDIO_CACHE_MAX = 6  # WAVs kept in RAM (about 40 KB each)
+AUDIO_CACHE_MAX = 10  # WAVs kept in RAM (about 20-50 KB each): word + sentence, current + next
 
 UP, DOWN, SPEAK, TOGGLE = "up", "down", "speak", "toggle"
 
@@ -113,15 +113,25 @@ class App:
             self._prefetch_audio()
             time.sleep_ms(100)
 
-    def _wanted_audio(self):
+    @staticmethod
+    def clips_of(word):
+        """Audio URLs a tap plays for this word: the word, then its first example sentence."""
         urls = []
+        sentences = word.get("sentences") or []
+        for item in (word, sentences[0] if sentences else None):
+            info = item.get("audio") if item else None
+            if info and info.get("url"):
+                urls.append(info["url"])
+        return urls
+
+    def _wanted_audio(self):
         word = self.current()
         with self.lock:
             candidates = [word, self.prefetched[self.language]]
+        urls = []
         for w in candidates:
-            info = w.get("audio") if w else None
-            if info and info.get("url"):
-                urls.append(info["url"])
+            if w:
+                urls.extend(self.clips_of(w))
         return urls
 
     def _prefetch_audio(self):
@@ -250,25 +260,29 @@ class App:
         if self.speaker is None:
             self.show("Speaker unavailable: %s" % self.speaker_error)
             return
-        info = word.get("audio")
-        if not info:
+        urls = self.clips_of(word)
+        if not urls:
             self.show("No audio for this word yet")
             return
-        url = info["url"]
-        with self.lock:
-            data = self.audio_cache.get(url)
-        t = time.ticks_ms()
-        if data is not None:
-            n = self.speaker.play_wav_bytes(data)
-            print("played", n, "bytes from RAM in", time.ticks_diff(time.ticks_ms(), t), "ms")
-            return
-        with self.net_lock:
-            body, length, response = api.open_audio(url)
-            try:
-                n = self.speaker.play_wav_stream(body, length)
-                print("streamed", n, "bytes in", time.ticks_diff(time.ticks_ms(), t), "ms")
-            finally:
-                response.close()
+        try:
+            for i, url in enumerate(urls):
+                keep = i < len(urls) - 1  # amp stays on through the 0.5 s pause between clips
+                with self.lock:
+                    data = self.audio_cache.get(url)
+                t = time.ticks_ms()
+                if data is not None:
+                    n = self.speaker.play_wav_bytes(data, keep_amp=keep)
+                    print("played", n, "bytes from RAM in", time.ticks_diff(time.ticks_ms(), t), "ms")
+                    continue
+                with self.net_lock:
+                    body, length, response = api.open_audio(url)
+                    try:
+                        n = self.speaker.play_wav_stream(body, length, keep_amp=keep)
+                        print("streamed", n, "bytes in", time.ticks_diff(time.ticks_ms(), t), "ms")
+                    finally:
+                        response.close()
+        finally:
+            self.speaker.amp_off()
 
     # --- buttons -----------------------------------------------------------------
 

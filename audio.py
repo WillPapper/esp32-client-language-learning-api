@@ -89,10 +89,15 @@ class Speaker:
     def _start(self):
         self.amp(1)
 
-    def _stop(self):
-        # Queue a DMA buffer's worth of silence: the write returns once the last real samples
-        # have left the buffer, and the bus keeps looping silence afterwards.
+    def _stop(self, keep_amp):
+        # Queue a DMA buffer's worth (0.5 s) of silence: the write returns once the last real
+        # samples have left the buffer, and the bus keeps looping silence afterwards. A clip
+        # played right after this one therefore starts after a 0.5 s pause.
         self.i2s.write(self._silence)
+        if not keep_amp:
+            self.amp(0)
+
+    def amp_off(self):
         self.amp(0)
 
     def deinit(self):
@@ -100,8 +105,9 @@ class Speaker:
         self.codec.standby()
         self.i2s.deinit()
 
-    def play_pcm(self, read):
-        """Play 16-bit mono PCM at 16 kHz. `read(buf)` fills buf and returns the byte count, 0 at end."""
+    def play_pcm(self, read, keep_amp=False):
+        """Play 16-bit mono PCM at 16 kHz. `read(buf)` fills buf and returns the byte count, 0 at end.
+        keep_amp=True leaves the amplifier on for a following clip; call amp_off() after the last."""
         self._start()
         total = 0
         try:
@@ -117,10 +123,10 @@ class Speaker:
                 if self.on_chunk:
                     self.on_chunk()
         finally:
-            self._stop()
+            self._stop(keep_amp)
         return total
 
-    def play_wav_stream(self, stream, length=None):
+    def play_wav_stream(self, stream, length=None, keep_amp=False):
         """Play a WAV from a file-like object with `readinto()` (a file or an HTTP body)."""
         header = bytearray(44)
         got = 0
@@ -145,9 +151,9 @@ class Speaker:
                 remaining[0] -= n
             return n or 0
 
-        return self.play_pcm(read)
+        return self.play_pcm(read, keep_amp)
 
-    def play_wav_bytes(self, data):
+    def play_wav_bytes(self, data, keep_amp=False):
         """Play a WAV already in memory (bytes or bytearray)."""
         rate, channels, bits, data_bytes = parse_wav_header(data)
         if rate != RATE or channels != 1 or bits != 16:
@@ -164,7 +170,7 @@ class Speaker:
             pos[0] += n
             return n
 
-        return self.play_pcm(read)
+        return self.play_pcm(read, keep_amp)
 
     def beep(self, freq=880, ms=200, amplitude=8000):
         """Short sine tone, for checking the speaker without the network."""

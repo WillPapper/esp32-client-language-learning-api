@@ -8,7 +8,7 @@ MicroPython.
 | ------------------------ | ---------------------------------------------------------------------- |
 | Up (GPIO 39)             | Next word. At the end of the history, fetches a new random word from the API |
 | Down (GPIO 18)           | Previous word                                                          |
-| Main, tap (GPIO 0)       | Speak the word using the API's text-to-speech WAV                      |
+| Main, tap (GPIO 0)       | Speak the word, then after a 0.5 s pause its first example sentence (the API's text-to-speech WAVs) |
 | Main, hold (≥ 0.6 s)     | Switch between Japanese and Mandarin. Each language keeps its own history |
 
 Only one language is on screen at a time. A card shows the word, its reading (kana and romaji,
@@ -62,7 +62,8 @@ installed.
   white flash) the first time, every 10 partials to clear ghosting, and on a language switch.
   Row packing is a viper function (10 ms).
 - **Responsiveness.** A background thread keeps one random word prefetched per language and
-  downloads the WAV for the current and next word into RAM (up to 6 cached, about 40 KB each),
+  downloads the WAVs (word and first sentence) for the current and next word into RAM (up to
+  10 cached, 20-50 KB each),
   and the main loop warms the font caches for the next words while idle. So "up" costs one
   partial refresh, a tap speaks at once, and a language switch is one full refresh. Buttons are
   polled while the panel is busy and between audio chunks; presses noticed then are queued, and
