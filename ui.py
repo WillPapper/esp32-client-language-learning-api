@@ -58,8 +58,9 @@ BATTERY_H = 12
 
 
 def draw_battery(fb, x, y, battery, ink=WHITE):
-    """A battery outline with its charge level filled in; a bolt while charging.
-    `battery` is the dict from battery.Battery.read(), or None to draw nothing."""
+    """A battery outline with its charge level filled in, and a bolt whenever USB power is
+    present (charging or already full). `battery` is the dict from battery.Battery.read(), or
+    None to draw nothing."""
     if not battery:
         return x
     bg = 1 - ink
@@ -71,7 +72,7 @@ def draw_battery(fb, x, y, battery, ink=WHITE):
         fill = inner
     if fill:
         fb.fill_rect(x + 2, y + 2, fill, BATTERY_H - 4, ink)
-    if battery.get("charging") and not battery.get("full"):
+    if battery.get("charging") or battery.get("full"):
         # A small bolt drawn in the background colour over the fill, and ink over the empty part
         bx = x + BATTERY_W // 2 - 4
         for i, (dx, w) in enumerate(((3, 3), (2, 3), (1, 3), (0, 5), (3, 3), (2, 3), (1, 3), (0, 2))):

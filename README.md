@@ -96,7 +96,7 @@ installed.
   `audio.Speaker(volume=...)`, 100 = 0 dB at the DAC; the API's files are normalised to
   -20 dBFS RMS.
 - **Battery.** The header shows a battery icon (filled to the stock firmware's percent curve,
-  a bolt while charging). It is read each time a card is drawn, and the idle loop checks it
+  a bolt whenever USB power is present, charging or full). It is read each time a card is drawn, and the idle loop checks it
   every 0.5 s: when the charging state or the 10 % step differs from what is shown for two
   reads in a row, the card is redrawn (one partial refresh, about a second after plugging or
   unplugging the cable).

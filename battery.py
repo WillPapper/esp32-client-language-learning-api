@@ -31,11 +31,15 @@ class Battery:
         return max(0, min(100, percent))
 
     def read(self):
-        """{"mv", "percent", "charging", "full"}"""
+        """{"mv", "percent", "charging", "full", "powered"}. Measured on the NOTE4: on USB with a
+        full battery, charging=False and full=True; unplugged, both are False."""
         mv = self.voltage_mv()
+        charging = self.detect() == 0
+        full = self.full() == 1
         return {
             "mv": mv,
             "percent": self.percent_for(mv),
-            "charging": self.detect() == 0,
-            "full": self.full() == 1,
+            "charging": charging,
+            "full": full,
+            "powered": charging or full,
         }
