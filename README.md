@@ -6,14 +6,31 @@ MicroPython.
 
 | Button                   | Action                                                                 |
 | ------------------------ | ---------------------------------------------------------------------- |
-| Up (GPIO 39)             | Next word. At the end of the history, fetches a new random word from the API |
+| Up (GPIO 39)             | Next word. At the end of the history, fetches a new random word from the API. In reveal mode the first press shows the hidden card |
 | Down (GPIO 18)           | Previous word                                                          |
-| Main, tap (GPIO 0)       | Speak the word, then after a 0.5 s pause its first example sentence (the API's text-to-speech WAVs) |
+| Main, tap (GPIO 0)       | Speak the word, then after a 0.5 s pause the example sentence on screen (the API's text-to-speech WAVs). A tap while speaking stops it |
+| Main, double tap         | The same at slow speed, once the API serves slow audio (`audio.slowUrl`); until then normal speed with a note in the footer. A tap right after stopping playback also plays the slow version |
 | Main, hold (≥ 0.6 s)     | Switch between Japanese and Mandarin. Each language keeps its own history |
+| Up, hold                 | Reveal mode on/off: cards show only the headword until "up" is pressed |
+| Down, hold               | Show the word's next example sentence (cycles)                        |
+| Up + down together       | Open or close the settings screen                                      |
 
 Only one language is on screen at a time. A card shows the word, its reading (kana and romaji,
-or pinyin), the meaning and part of speech, and as many example sentences as fit, each with its
-reading and translation.
+or pinyin), the meaning and part of speech, and one example sentence with its reading and
+translation. The sentence is picked at random when the word is fetched (every word has two or
+four), and its audio is what a tap plays; the small `2/4` by the divider says which one is up.
+
+**Settings** (up + down together): up/down move, tap changes a value, hold the main button
+changes it the other way, up + down again saves and closes.
+
+| Setting | |
+| ------- | - |
+| Volume | 0-100 % in steps of 10; a short beep plays the new level |
+| Reveal mode | on/off, same as holding "up" |
+| Sleep after | 1, 2, 5, 10 or 30 minutes idle, or never (see Power) |
+| Level checkboxes | One row per level label the API reports for each language (`GET /:language/levels`, with word counts). Checked levels are sent as `?level=A,B` on word fetches; none checked means every word |
+
+Settings are saved to `settings.json` on the device and survive resets and deploys.
 
 ## Setup
 
@@ -49,6 +66,7 @@ installed.
 | `es8311.py` | Minimal ES8311 register driver (playback only) |
 | `buttons.py` | Polled buttons with tap / hold detection |
 | `battery.py` | Battery voltage (ADC on GPIO 4), percent and charging state (GPIO 2 / GPIO 1) |
+| `settings.py` | Settings model, saved as `settings.json` on the device |
 | `note4_epd.py` | E-paper driver: partial refresh (about 0.8 s), full every 10 partials or on request |
 | `wifi.py` | `wifi.connect()` with readable errors |
 | `fonts/` | Noto Sans CJK JP and SC rendered to bitmaps at 40, 22 and 16 px (SIL OFL 1.1) |
@@ -95,18 +113,28 @@ installed.
   both are pad-held by the stock firmware, so the driver passes `hold=` explicitly. Volume is
   `audio.Speaker(volume=...)`, 100 = 0 dB at the DAC; the API's files are normalised to
   -20 dBFS RMS.
-- **Battery.** The header shows a battery icon (filled to the stock firmware's percent curve,
-  a bolt whenever USB power is present, charging or full). It is read each time a card is drawn, and the idle loop checks it
-  every 0.5 s: when the charging state or the 10 % step differs from what is shown for two
-  reads in a row, the card is redrawn (one partial refresh, about a second after plugging or
-  unplugging the cable).
+- **Header.** Battery icon (filled to the stock firmware's percent curve, a bolt whenever USB
+  power is present, charging or full) with the percentage, then a Wi-Fi glyph: signal bars
+  when connected, a cross while the link is down. Both are read each time a card is drawn, and
+  the idle loop checks them every 0.5 s: when the USB state, the 10 % step or the connection
+  differs from what is shown for two reads in a row, the card is redrawn (one partial refresh,
+  about a second after plugging or unplugging the cable). If Wi-Fi drops, the prefetch thread
+  reconnects on its own; the cross goes away when it has.
 - **Power.** While nothing is queued and the prefetch thread is idle, the main loop drops the
-  CPU to 80 MHz and goes back to 240 MHz when work arrives. Wi-Fi stays connected in modem
-  sleep (MicroPython's default `PM_PERFORMANCE`), the codec and I2S stay powered so a tap plays
-  at once, and the e-paper draws nothing between refreshes. Idle draw is not measured; expect
-  tens of milliamps, mostly the Wi-Fi radio. The stock firmware additionally shuts the unit
-  down after five idle minutes by dropping the battery latch (GPIO 17), which this app does not
-  do yet.
+  CPU to 80 MHz and goes back to 240 MHz when work arrives. On battery, after the "sleep
+  after" setting (default 2 min) with no presses, the app turns Wi-Fi and the codec off and
+  light-sleeps in 100 ms slices, polling the three buttons and the charger pins between slices
+  (MicroPython's pin wake-up uses the ext0 source, which takes one RTC-capable pin, and the up
+  button on GPIO 39 is not one). The card stays on the e-paper, which needs no power to hold
+  an image. Any press wakes it: the press itself is handled right away from the prefetched
+  word and audio, the codec is re-initialised (about 0.2 s) and Wi-Fi reconnects in the
+  background (about 6 s, during which the header keeps its signal bars). Plugging or unplugging
+  the cable also wakes it for one header redraw. After 30 idle minutes on battery it shows a
+  "powered off" card and drops the battery latch (GPIO 17), as the stock firmware does after
+  five; `main.py` raises the latch first thing at boot so the power button only needs a short
+  hold. On USB power the app never sleeps or powers off, which also keeps the USB console
+  alive for `tools/deploy.sh` (light sleep disconnects the USB serial port). Idle draw is not
+  measured; awake, expect tens of milliamps, mostly the Wi-Fi radio.
 - **Preview on a Mac.** `uv run --with pillow python tools/preview.py ja out.png` draws a live
   random word with the real `ui.py`; pass a saved JSON response as a third argument, or
   `--message` for the start-up screen.

@@ -13,6 +13,13 @@
 Only one language is shown at a time. Each card shows one example sentence, chosen at random
 when the word is fetched; a tap plays the word and that sentence.
 
+Power: on battery, after the "sleep after" setting (default 2 min) of no presses the app turns
+Wi-Fi and the codec off and light-sleeps in 100 ms slices, polling the buttons and the charger
+pins between slices (the card stays on the e-paper). Any press wakes it; Wi-Fi reconnects in
+the background. After POWER_OFF_MIN idle on battery it drops the battery latch (GPIO 17) and
+powers off like the stock firmware. On USB power it never sleeps, which also keeps the USB
+console alive for deploys.
+
 Responsiveness: a background thread keeps one random word prefetched per language and
 downloads the audio for the current and the next word into RAM, and the main loop warms the
 glyph cache for the next word while idle, so "up" costs only a partial e-paper refresh (about
@@ -27,6 +34,7 @@ import sys
 import time
 
 import api
+import audio
 import battery
 import buttons
 import note4_epd
@@ -51,6 +59,8 @@ DOUBLE_TAP_MS = 350  # a second tap within this window of the first makes a doub
 # CPU clock while idle (nothing queued, no prefetch or glyph warming in progress) and while busy.
 IDLE_MHZ = 80
 BUSY_MHZ = 240
+SLEEP_SLICE_MS = 100  # light-sleep length between button polls (wake latency)
+POWER_OFF_MIN = 30  # minutes idle on battery before powering off
 
 
 class App:
@@ -78,6 +88,9 @@ class App:
         self.main = buttons.Button(buttons.PIN_MAIN)
         self.pending = []  # button events noticed while busy, handled by the main loop
         self._chord = False  # up and down pressed together; their releases are swallowed
+        self._active_at = time.ticks_ms()  # last button event, for the sleep timers
+        self._woke_at = None  # end of the last sleep; Wi-Fi gets a grace period before the glyph
+        self.sleeping = False
         self.speaking = False  # inside speak(); a main-button tap then cancels instead of queueing
         self._tap_at = None  # ticks of a first tap, waiting DOUBLE_TAP_MS for a second one
         self._cancelled_at = None  # ticks when a tap stopped playback (a quick second tap = slow)
@@ -424,6 +437,9 @@ class App:
             return
         self._status_checked = now
         key = self._status_key(self.state())
+        if (not self.online and self._woke_at is not None and self._status_shown is not None
+                and time.ticks_diff(now, self._woke_at) < 20_000):
+            key = key[:3] + (self._status_shown[3],)  # reconnecting after sleep: no cross yet
         if key == self._status_shown:
             self._status_seen = key
             return
@@ -468,6 +484,7 @@ class App:
 
     def process_pending(self):
         """Handle queued events in order, merging runs of up/down into one move."""
+        self._active_at = time.ticks_ms()
         while self.pending:
             event = self.pending.pop(0)
             if self.mode == "settings":
@@ -569,6 +586,71 @@ class App:
         if key[0] == "volume" and self.speaker is not None and self.settings["volume"]:
             self.speaker.beep(ms=120)
 
+    # --- power -------------------------------------------------------------------
+
+    def idle_ms(self):
+        return time.ticks_diff(time.ticks_ms(), self._active_at)
+
+    def maybe_sleep(self):
+        """Light-sleep once idle for the "sleep after" setting, on battery only."""
+        minutes = self.settings["sleep_min"]
+        if not minutes or self.pending or self._tap_at is not None or self.speaking:
+            return
+        if self.idle_ms() < minutes * 60_000:
+            return
+        if self.battery.read()["powered"]:
+            self._active_at = time.ticks_ms()  # on USB: check again in a while
+            return
+        with self.lock:
+            busy = any(self.fetching.values()) or self.downloading
+        if not busy:
+            self.sleep()
+
+    def sleep(self):
+        import machine
+        print("sleep: idle for %d s on battery" % (self.idle_ms() // 1000))
+        self.net_lock.acquire()  # waits for the thread's request, then keeps it off the network
+        self.sleeping = True
+        try:
+            if self.speaker is not None:
+                self.speaker.deinit()
+                self.speaker = None
+            if self.wlan is not None:
+                self.wlan.active(False)
+            self.online = False
+            self._status_seen = self._status_shown  # the Wi-Fi drop is not worth a refresh
+            detect = self.battery.detect()
+            full = self.battery.full()
+            while True:
+                machine.lightsleep(SLEEP_SLICE_MS)
+                if self.up.pressed() or self.down.pressed() or self.main.pressed():
+                    break
+                if self.battery.detect() != detect or self.battery.full() != full:
+                    print("wake: charger changed")
+                    break
+                if self.idle_ms() > POWER_OFF_MIN * 60_000:
+                    self.power_off()
+        finally:
+            self.sleeping = False
+            self._woke_at = self._active_at = time.ticks_ms()
+            self.net_lock.release()  # the thread reconnects Wi-Fi
+        print("wake")
+        self.init_speaker()
+
+    def power_off(self):
+        """Drop the battery latch, as the stock firmware does after five idle minutes. Only
+        returns if the unit stays powered (USB plugged in meanwhile), then restarts the app."""
+        import machine
+        from machine import Pin
+        print("power off: idle for %d min" % POWER_OFF_MIN)
+        self.mode = "cards"
+        self.message("Language cards", ["Powered off after %d idle minutes." % POWER_OFF_MIN,
+                                        "Hold ● to turn on."])
+        Pin(audio.PIN_AUDIO_PWR, Pin.OUT, value=0, hold=True)
+        Pin(note4_epd.PIN_VBAT_PWR, Pin.OUT, value=0, hold=True)
+        time.sleep(3)
+        machine.reset()
+
     # --- lifecycle ---------------------------------------------------------------
 
     def connect(self):
@@ -585,7 +667,6 @@ class App:
 
     def init_speaker(self):
         try:
-            import audio
             self.speaker = audio.Speaker(volume=self.settings["volume"])
             self.speaker.on_chunk = self.poll_buttons
         except Exception as e:
@@ -631,6 +712,7 @@ class App:
             else:
                 self.warm_glyphs()
                 self.check_status()
+                self.maybe_sleep()
             # Slow the CPU down while there is nothing to do; the prefetch thread and glyph
             # warming run at full speed so they finish quickly.
             with self.lock:
