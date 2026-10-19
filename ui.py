@@ -163,55 +163,32 @@ def _lines(fb, font, text, y, limit, max_lines, centered=False, x=MARGIN):
     return y
 
 
-def _sentence_block(fonts, language, s, max_h=None):
-    """[(font, lines)] for one example sentence: text, its reading(s), translation. With
-    `max_h`, the fullest version that fits in that height: first the romaji goes, then the
-    reading and translation are cut to one line each, then the reading goes, and as a last
-    resort only the sentence itself is kept (cut to one line)."""
+def _sentence_block(fonts, language, s):
+    """[(font, lines)] for one example sentence, complete: text, its reading(s), translation,
+    each wrapped to as many lines as it needs."""
     max_w = WIDTH - 2 * MARGIN
-    text = s.get("characters") or ""
+    block = [(fonts.body, nfont.wrap(fonts.body, s.get("characters") or "", max_w))]
     if language == "zh":
-        kana, romaji = s.get("pinyin"), None
+        readings = [s.get("pinyin")]
     else:
-        kana, romaji = s.get("kana"), s.get("romaji")
-    translation = s.get("translation") or ""
-
-    def wrap(font, t, n):
-        lines = nfont.wrap(font, t, max_w)
-        if len(lines) > n:
-            lines = lines[:n]
-            lines[-1] = nfont.fit(font, lines[-1] + "…", max_w)
-        return lines
-
-    def build(text_lines, kana_lines, romaji_lines, tr_lines):
-        block = [(fonts.body, wrap(fonts.body, text, text_lines))]
-        if kana and kana_lines:
-            block.append((fonts.small, wrap(fonts.small, kana, kana_lines)))
-        if romaji and romaji_lines:
-            block.append((fonts.small, wrap(fonts.small, romaji, romaji_lines)))
-        if tr_lines:
-            block.append((fonts.small, wrap(fonts.small, translation, tr_lines)))
-        return block
-
-    variants = ((2, 2, 2, 2), (2, 2, 0, 2), (2, 1, 0, 1), (2, 0, 0, 1), (1, 0, 0, 1), (1, 0, 0, 0))
-    for v in variants:
-        block = build(*v)
-        if max_h is None or sum(font.height * len(lines) for font, lines in block) <= max_h:
-            return block
+        readings = [s.get("kana"), s.get("romaji")]
+    for text in readings:
+        if text:
+            block.append((fonts.small, nfont.wrap(fonts.small, text, max_w)))
+    block.append((fonts.small, nfont.wrap(fonts.small, s.get("translation") or "", max_w)))
     return block
 
 
 REVEAL_STAGES = {"ja": 1, "zh": 2}  # presses of "up" to reveal a card fully in reveal mode
 
 
-def draw_word(fb, fonts, word, language, position, total, status=None, state=None, stage=None,
-              expanded=False):
+def draw_word(fb, fonts, word, language, position, total, status=None, state=None, stage=None):
     """Lay out one vocabulary card. `position` is 0-based within `total` words seen. `stage`
     is the reveal-mode stage: 0 draws only the headword, 1 the headword and its reading
     (Mandarin: pinyin before the meaning, so characters and pronunciation can be tested
-    separately), None or REVEAL_STAGES[language] the whole card. `expanded` draws the
-    sentence page instead: the headword on one line, then the whole example sentence.
-    Returns True when the sentence had to be trimmed to fit (so a sentence page exists)."""
+    separately), None or REVEAL_STAGES[language] the whole card. The sentence area scrolls:
+    it starts at line word["scroll"] of the sentence block. Returns (lines drawn, lines left),
+    so the caller can scroll on by a page or move to the next sentence."""
     fb.fill(WHITE)
     pos = word.get("partOfSpeech") or ""
     _header(fb, fonts, LANGUAGE_NAME[language], levels_of(word), "%d / %d" % (position + 1, total), state)
@@ -219,16 +196,6 @@ def draw_word(fb, fonts, word, language, position, total, status=None, state=Non
     limit = HEIGHT - FOOTER_H - 2
     y = HEADER_H + 6
     head = word.get("characters") or ""
-    if expanded:
-        line = head
-        reading = reading_of(language, word)
-        if reading:
-            line += "   " + reading
-        nfont.draw_centered(fb, fonts.body, nfont.fit(fonts.body, line, WIDTH - 2 * MARGIN), y, w=WIDTH)
-        y += fonts.body.height + 2
-        _sentence(fb, fonts, word, language, y, limit, trim=False)
-        _footer(fb, fonts, status or "▲ next   ▼ back   ● speak   hold ▼ more")
-        return False
     if stage is not None and stage < REVEAL_STAGES[language]:
         reading = reading_of(language, word) if stage >= 1 else ""
         block_h = fonts.big.height + (fonts.body.height + 4 if reading else 0)
@@ -242,7 +209,7 @@ def draw_word(fb, fonts, word, language, position, total, status=None, state=Non
             _lines(fb, fonts.body, reading, y + 4, limit, 1, centered=True)
         what = "▲ reveal" if stage + 1 >= REVEAL_STAGES[language] else "▲ pinyin"
         _footer(fb, fonts, status or what + "   ▼ back   ● speak   hold ▲ to exit")
-        return
+        return (0, 0)
     if fonts.big.width(head) <= WIDTH - 2 * MARGIN:
         nfont.draw_centered(fb, fonts.big, head, y, w=WIDTH)
         y += fonts.big.height
@@ -258,45 +225,58 @@ def draw_word(fb, fonts, word, language, position, total, status=None, state=Non
     if pos:
         meaning = meaning + "  (" + pos + ")"
     y = _lines(fb, fonts.body, meaning, y, limit, 2, centered=True)
-    trimmed = _sentence(fb, fonts, word, language, y, limit, trim=True)
+    drawn, left = _sentence(fb, fonts, word, language, y, limit)
 
     if status:
         _footer(fb, fonts, status)
     else:
         _footer(fb, fonts, "▲ next   ▼ back   ● speak   hold ● for " + LANGUAGE_NAME_EN[OTHER[language]])
-    return trimmed
+    return drawn, left
 
 
-def _sentence(fb, fonts, word, language, y, limit, trim):
+def _sentence(fb, fonts, word, language, y, limit):
     """Draw the example sentence chosen for this card (word["sentence"], picked at random when
-    the word was fetched; its audio is what a tap plays) below a divider. With `trim` the block
-    is shrunk to the room left; returns True when that lost something, which is when hold
-    "down" first shows the sentence page before moving to the next sentence."""
+    the word was fetched; its audio is what a tap plays) below a divider, starting at line
+    word["scroll"] of its block (sentence, reading(s), translation) and stopping at `limit`.
+    Returns (lines drawn, lines left below)."""
     sentences = word.get("sentences") or []
     if not sentences:
-        return False
+        return (0, 0)
     index = word.get("sentence", 0) % len(sentences)
     several = len(sentences) > 1
-    gap = 16 if several else 10
-    full = _sentence_block(fonts, language, sentences[index])
-    block = _sentence_block(fonts, language, sentences[index], limit - y - gap) if trim else full
-    trimmed = block != full
-    if y + gap + sum(font.height * len(lines) for font, lines in block) > limit:
-        return True
-    y += 10 if several else 4
+    lines = []
+    for font, text_lines in _sentence_block(fonts, language, sentences[index]):
+        for line in text_lines:
+            lines.append((font, line))
+    start = min(word.get("scroll", 0), max(0, len(lines) - 1))
+    y += 10
+    top = y + 6
+    drawn = 0
+    yy = top
+    for font, line in lines[start:]:
+        if yy + font.height > limit:
+            break
+        yy += font.height
+        drawn += 1
+    left = len(lines) - start - drawn
+    # The divider, with "2/4" and "hold ▼ more" or "hold ▼ next" at its right end
+    label = ""
+    if several:
+        label = "%d/%d" % (index + 1, len(sentences))
+    if left:
+        label += "   hold ▼ more"
+    elif several:
+        label += "   hold ▼ next"
     right = WIDTH - MARGIN - 40
-    if several or trimmed:
-        # "hold ▼ 2/4" sits on the divider at the right, with the divider ending before it
-        label = "hold ▼  %d/%d" % (index + 1, len(sentences)) if several else "hold ▼ more"
+    if label:
         right = WIDTH - MARGIN - fonts.small.width(label) - 8
         nfont.draw_right(fb, fonts.small, label, WIDTH - MARGIN, y - fonts.small.height // 2)
     fb.hline(MARGIN + 40, y, right - (MARGIN + 40), BLACK)
-    y += 6
-    for font, lines in block:
-        for line in lines:
-            nfont.draw(fb, font, line, MARGIN, y)
-            y += font.height
-    return trimmed
+    yy = top
+    for font, line in lines[start:start + drawn]:
+        nfont.draw(fb, font, line, MARGIN, yy)
+        yy += font.height
+    return drawn, left
 
 
 def draw_settings(fb, fonts, rows, cursor, state=None, hint="● change"):

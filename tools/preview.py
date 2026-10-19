@@ -8,7 +8,7 @@
     uv run --with pillow python tools/preview.py zh out.png --pinyin   # reveal mode, after the first press
     uv run --with pillow python tools/preview.py ja out.png --settings
     uv run --with pillow python tools/preview.py zh out.png --info      # the controls page
-    uv run --with pillow python tools/preview.py ja out.png word.json --expanded   # the sentence page
+    uv run --with pillow python tools/preview.py ja out.png word.json --scroll=3   # sentence area scrolled
 
 Run from the repository root so the fonts/ directory is found.
 """
@@ -60,9 +60,11 @@ def main(argv):
                 word = json.load(r)
         print(json.dumps(word, ensure_ascii=False)[:300])
         word["sentence"] = 1
+        for f in flags:
+            if f.startswith("--scroll="):
+                word["scroll"] = int(f[9:])
         ui.draw_word(fb, fonts, word, language, 2, 5, rest[1] if len(rest) > 1 else None,
-                     state=state, stage=0 if "--hidden" in flags else 1 if "--pinyin" in flags else None,
-                     expanded="--expanded" in flags)
+                     state=state, stage=0 if "--hidden" in flags else 1 if "--pinyin" in flags else None)
     fb.to_image().save(out)
     print("wrote", out)
 

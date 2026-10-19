@@ -73,8 +73,7 @@ class App:
         self.mode = "cards"  # or "settings" or "info" (the controls page)
         self.cursor = 0  # selected settings row
         self.revealed = 0  # reveal mode: how much of the current card is showing (ui.REVEAL_STAGES)
-        self.expanded = False  # showing the sentence page (whole sentence) instead of the card
-        self._trimmed = False  # the card's sentence was shrunk to fit, so a sentence page exists
+        self._sentence_lines = (0, 0)  # (drawn, left) sentence lines on the card, from draw_word
         self.history = {lang: [] for lang in LANGUAGES}
         self.position = {lang: -1 for lang in LANGUAGES}
         self.speaker = None
@@ -133,9 +132,9 @@ class App:
         state = self.state()
         self._status_shown = self._status_seen = self._status_key(state)
         stage = self.revealed if self.settings["reveal"] else None
-        self._trimmed = ui.draw_word(self.epd, self.fonts[self.language], word, self.language,
-                                     self.position[self.language], len(self.history[self.language]),
-                                     status, state, stage, self.expanded)
+        self._sentence_lines = ui.draw_word(self.epd, self.fonts[self.language], word, self.language,
+                                            self.position[self.language], len(self.history[self.language]),
+                                            status, state, stage)
         drew = time.ticks_diff(time.ticks_ms(), t)
         kind = self.epd.show(full=full)
         print("drew in %d ms, %s refresh in %d ms" % (drew, kind, time.ticks_diff(time.ticks_ms(), t) - drew))
@@ -343,7 +342,6 @@ class App:
             self.show()
             return
         self.revealed = 0
-        self.expanded = False
         pos = self.position[self.language]
         last = len(self.history[self.language]) - 1
         if delta < 0:
@@ -367,16 +365,17 @@ class App:
         self.move(-1)
 
     def next_sentence(self):
-        """Hold "down": the sentence page when the card had to trim the sentence, else the
-        next example sentence (back on the card)."""
+        """Hold "down": scroll the sentence area on by a page while lines are left below,
+        else the next example sentence from its top."""
         word = self.current()
         n = len(word.get("sentences") or []) if word else 0
         if not n:
             return
-        if self._trimmed and not self.expanded:
-            self.expanded = True
+        drawn, left = self._sentence_lines  # (0, 0) while the card is hidden in reveal mode
+        if left:
+            word["scroll"] = word.get("scroll", 0) + drawn
         else:
-            self.expanded = False
+            word["scroll"] = 0
             if n < 2:
                 return
             word["sentence"] = (word.get("sentence", 0) + 1) % n
@@ -393,7 +392,6 @@ class App:
     def toggle_language(self):
         self.language = ui.OTHER[self.language]
         self.revealed = 0
-        self.expanded = False
         print("language:", self.language)
         if not self.history[self.language]:
             self.fetch()
