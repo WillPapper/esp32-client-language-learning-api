@@ -1,13 +1,13 @@
 """Vocabulary cards on the Zectrix NOTE4.
 
     Up button (GPIO 39)     next word; a new random word when at the end of the history
-    Down button (GPIO 18)   previous word
+    Down button (GPIO 18)   scroll the sentence area, then the next example sentence
     Main button tap (GPIO 0) speak the word, then after a short pause its first example sentence
     Main button double tap  the same, slowly (once the API serves slow audio)
     Main button tap while speaking   stop; a second tap right after plays the slow version
     Main button hold        switch between Japanese and Mandarin (each keeps its own history)
     Up button hold          reveal mode on/off (cards show only the headword until "up")
-    Down button hold        show the word's next example sentence
+    Down button hold        previous word
     Up + down together      open or close the settings screen (levels, volume, reveal, sleep)
 
 Only one language is shown at a time. Each card shows one example sentence, chosen at random
@@ -365,8 +365,8 @@ class App:
         self.move(-1)
 
     def next_sentence(self):
-        """Hold "down": scroll the sentence area on by a page while lines are left below,
-        else the next example sentence from its top."""
+        """"Down": scroll the sentence area on by a page while lines are left below, else the
+        next example sentence from its top."""
         word = self.current()
         n = len(word.get("sentences") or []) if word else 0
         if not n:
@@ -511,14 +511,14 @@ class App:
                     self.handle(self.show_settings)
             elif self.mode == "settings":
                 self.handle(lambda: self.settings_event(event))
-            elif event in (UP, DOWN):
+            elif event in (UP, DOWN_HOLD):
                 delta = 1 if event == UP else -1
-                while self.pending and self.pending[0] in (UP, DOWN) and not self.settings["reveal"]:
+                while self.pending and self.pending[0] in (UP, DOWN_HOLD) and not self.settings["reveal"]:
                     delta += 1 if self.pending.pop(0) == UP else -1
                 self.handle(lambda: self.move(delta))
             elif event == UP_HOLD:
                 self.handle(self.toggle_reveal)
-            elif event == DOWN_HOLD:
+            elif event == DOWN:
                 self.handle(self.next_sentence)
             elif event == SETTINGS:
                 self.handle(self.open_settings)
@@ -759,7 +759,7 @@ class App:
 
     def run(self):
         self.start()
-        print("ready: up = next, down = back, tap = speak, hold = switch language")
+        print("ready: up = next, down = sentence, hold down = back, tap = speak, hold = switch language")
         import machine
         mhz = 0
         while True:

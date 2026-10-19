@@ -208,7 +208,7 @@ def draw_word(fb, fonts, word, language, position, total, status=None, state=Non
         if reading:
             _lines(fb, fonts.body, reading, y + 4, limit, 1, centered=True)
         what = "▲ reveal" if stage + 1 >= REVEAL_STAGES[language] else "▲ pinyin"
-        _footer(fb, fonts, status or what + "   ▼ back   ● speak   hold ▲ to exit")
+        _footer(fb, fonts, status or what + "   hold ▼ back   ● speak   hold ▲ to exit")
         return (0, 0)
     if fonts.big.width(head) <= WIDTH - 2 * MARGIN:
         nfont.draw_centered(fb, fonts.big, head, y, w=WIDTH)
@@ -230,7 +230,7 @@ def draw_word(fb, fonts, word, language, position, total, status=None, state=Non
     if status:
         _footer(fb, fonts, status)
     else:
-        _footer(fb, fonts, "▲ next   ▼ back   ● speak   hold ● for " + LANGUAGE_NAME_EN[OTHER[language]])
+        _footer(fb, fonts, "▲ next   hold ▼ back   ● speak   hold ● " + LANGUAGE_NAME[OTHER[language]])
     return drawn, left
 
 
@@ -264,9 +264,9 @@ def _sentence(fb, fonts, word, language, y, limit):
     if several:
         label = "%d/%d" % (index + 1, len(sentences))
     if left:
-        label += "   hold ▼ more"
+        label += "   ▼ more"
     elif several:
-        label += "   hold ▼ next"
+        label += "   ▼ next"
     right = WIDTH - MARGIN - 40
     if label:
         right = WIDTH - MARGIN - fonts.small.width(label) - 8
@@ -324,14 +324,15 @@ def draw_settings(fb, fonts, rows, cursor, state=None, hint="● change"):
 
 
 CONTROLS = (
-    ("▲  /  ▼", "next  /  previous word"),
+    ("▲", "next word"),
+    ("▼", "sentence: more  /  next"),
+    ("hold ▼", "previous word"),
     ("▲ (reveal mode)", "reveal: pinyin, then all"),
     ("●", "speak word and sentence"),
     ("● ●", "speak slowly"),
     ("● while speaking", "stop  (● again: slow)"),
     ("hold ●", "Japanese  /  Mandarin"),
     ("hold ▲", "reveal mode on  /  off"),
-    ("hold ▼", "next example sentence"),
     ("▲ + ▼", "settings"),
 )
 
@@ -342,7 +343,7 @@ def draw_info(fb, fonts, state=None):
     _header(fb, fonts, "Controls", None, None, state)
     y = HEADER_H + 8
     col = MARGIN + max(fonts.small.width(g) for g, _ in CONTROLS) + 14
-    row_h = fonts.small.height + 6
+    row_h = fonts.small.height + 4
     for gesture, action in CONTROLS:
         if y + row_h > HEIGHT - FOOTER_H:
             break
