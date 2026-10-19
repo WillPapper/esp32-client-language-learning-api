@@ -534,7 +534,7 @@ class App:
         rows = [(("volume",), "Volume", "%d %%" % st["volume"], None),
                 (("reveal",), "Reveal mode", "on" if st["reveal"] else "off", None),
                 (("sleep",), "Sleep after", ("%d min" % st["sleep_min"]) if st["sleep_min"] else "never", None),
-                (None, "%s levels  (switch language on a card first)" % ui.LANGUAGE_NAME_EN[lang],
+                (None, "Word levels  (current language: %s)" % ui.LANGUAGE_NAME_EN[lang],
                  None, None)]
         chosen = st.levels(lang)
         for item in self.known_levels(lang):

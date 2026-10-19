@@ -29,7 +29,7 @@ reveal mode or a level checkbox), up + down again saves and closes.
 | Volume | 0-100 % in steps of 10; a short beep plays the new level |
 | Reveal mode | on/off, same as holding "up" |
 | Sleep after | 1, 2, 5, 10 or 30 minutes idle, or never (see Power) |
-| Word levels | One checkbox per level label the API reports for the language on screen (`GET /:language/levels`, with word counts); switch language on a card first to see the other list. All are checked until you uncheck some; the checked ones are sent as `?level=A,B` on word fetches, and checking them all again clears the filter |
+| Word levels | One checkbox per level label the API reports for the current language, the one the cards are showing (`GET /:language/levels`, with word counts); the other language's list appears after switching with a hold of the main button. All are checked until you uncheck some; the checked ones are sent as `?level=A,B` on word fetches, and checking them all again clears the filter |
 
 Settings are saved to `settings.json` on the device and survive resets and deploys.
 

@@ -38,7 +38,7 @@ def main(argv):
     rest = [a for a in argv[3:] if not a.startswith("--")]
     if "--settings" in flags:
         rows = [("Volume", "80 %", None), ("Reveal mode", "off", None), ("Sleep after", "2 min", None),
-                ("Mandarin levels  (switch language on a card first)", None, None),
+                ("Word levels  (current language: Mandarin)", None, None),
                 ("HSK1  (158 words)", None, True), ("HSK2  (2 words)", None, False),
                 ("HSK3.0-1  (508 words)", None, True), ("HSK2025-1  (600 words)", None, True)]
         ui.draw_settings(fb, fonts, rows, 0, state, "● louder  hold ● quieter")
