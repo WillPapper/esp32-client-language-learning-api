@@ -29,7 +29,8 @@ PIN_AMP_EN = 46  # high = speaker amplifier on
 
 RATE = 16000
 CHUNK = 2048  # bytes of 16-bit PCM per I2S write (64 ms)
-IBUF = 32768  # I2S DMA buffer, in bytes of 32-bit samples (0.5 s)
+IBUF = 8192  # I2S DMA buffer, in bytes of 32-bit samples (128 ms; also how late a cancel() lands)
+GAP_MS = 500  # silence queued after a clip when another follows
 
 
 @micropython.viper
@@ -81,19 +82,29 @@ class Speaker:
         self._in = bytearray(CHUNK)
         self._out = bytearray(CHUNK * 2)
         self.on_chunk = None  # optional callback run between chunks (e.g. to poll buttons)
+        self.cancelled = False  # set by cancel(); play_pcm() stops at the next chunk
+
+    def cancel(self):
+        """Stop the clip being played (from on_chunk or another thread). The audio already in
+        the DMA buffer, up to 128 ms, still plays out."""
+        self.cancelled = True
 
     def set_volume(self, percent):
         self.volume = percent
         self.codec.set_volume(percent)
 
     def _start(self):
+        self.cancelled = False
         self.amp(1)
 
     def _stop(self, keep_amp):
-        # Queue a DMA buffer's worth (0.5 s) of silence: the write returns once the last real
-        # samples have left the buffer, and the bus keeps looping silence afterwards. A clip
-        # played right after this one therefore starts after a 0.5 s pause.
+        # Queue silence: the write returns once the real samples have left the buffer, and the
+        # bus keeps looping silence afterwards. With keep_amp (another clip follows) enough is
+        # queued for a GAP_MS pause before it.
         self.i2s.write(self._silence)
+        if keep_amp and not self.cancelled:
+            for _ in range(GAP_MS * RATE * 4 // 1000 // IBUF):
+                self.i2s.write(self._silence)
         if not keep_amp:
             self.amp(0)
 
@@ -122,6 +133,8 @@ class Speaker:
                 total += n
                 if self.on_chunk:
                     self.on_chunk()
+                if self.cancelled:
+                    break
         finally:
             self._stop(keep_amp)
         return total

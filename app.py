@@ -3,6 +3,8 @@
     Up button (GPIO 39)     next word; a new random word when at the end of the history
     Down button (GPIO 18)   previous word
     Main button tap (GPIO 0) speak the word, then after a short pause its first example sentence
+    Main button double tap  the same, slowly (once the API serves slow audio)
+    Main button tap while speaking   stop; a second tap right after plays the slow version
     Main button hold        switch between Japanese and Mandarin (each keeps its own history)
 
 Only one language is shown at a time.
@@ -36,6 +38,7 @@ PREFETCH_WAIT_MS = 25_000
 AUDIO_CACHE_MAX = 10  # WAVs kept in RAM (about 20-50 KB each): word + sentence, current + next
 
 UP, DOWN, SPEAK, TOGGLE = "up", "down", "speak", "toggle"
+DOUBLE_TAP_MS = 350  # a second tap within this window of the first makes a double tap
 # CPU clock while idle (nothing queued, no prefetch or glyph warming in progress) and while busy.
 IDLE_MHZ = 80
 BUSY_MHZ = 240
@@ -60,6 +63,9 @@ class App:
         self.down = buttons.Button(buttons.PIN_DOWN)
         self.main = buttons.Button(buttons.PIN_MAIN)
         self.pending = []  # button events noticed while busy, handled by the main loop
+        self.speaking = False  # inside speak(); a main-button tap then cancels instead of queueing
+        self._tap_at = None  # ticks of a first tap, waiting DOUBLE_TAP_MS for a second one
+        self._cancelled_at = None  # ticks when a tap stopped playback (a quick second tap = slow)
         self.epd.on_wait = self.poll_buttons
         # Prefetch state, shared with the background thread.
         self.prefetched = {lang: None for lang in LANGUAGES}
@@ -152,14 +158,19 @@ class App:
             time.sleep_ms(100)
 
     @staticmethod
-    def clips_of(word):
-        """Audio URLs a tap plays for this word: the word, then its first example sentence."""
+    def clips_of(word, slow=False):
+        """Audio URLs a tap plays for this word: the word, then its first example sentence.
+        With `slow`, the slow versions, where the API provides them (`audio.slowUrl`; the
+        endpoint is still being added), else an empty list."""
         urls = []
         sentences = word.get("sentences") or []
         for item in (word, sentences[0] if sentences else None):
             info = item.get("audio") if item else None
-            if info and info.get("url"):
-                urls.append(info["url"])
+            if not info:
+                continue
+            url = info.get("slowUrl") if slow else info.get("url")
+            if url:
+                urls.append(url)
         return urls
 
     def _wanted_audio(self):
@@ -296,19 +307,26 @@ class App:
             self.fetch()
         self.show(full=True)
 
-    def speak(self):
+    def speak(self, slow=False):
         word = self.current()
         if word is None:
             return
         if self.speaker is None:
             self.show("Speaker unavailable: %s" % self.speaker_error)
             return
-        urls = self.clips_of(word)
+        urls = self.clips_of(word, slow)
+        note = None
+        if slow and not urls:
+            note = "Slow audio is not available yet"
+            urls = self.clips_of(word)
         if not urls:
             self.show("No audio for this word yet")
             return
+        self.speaking = True
         try:
             for i, url in enumerate(urls):
+                if self.speaker.cancelled:
+                    break
                 keep = i < len(urls) - 1  # amp stays on through the 0.5 s pause between clips
                 with self.lock:
                     data = self.audio_cache.get(url)
@@ -325,7 +343,10 @@ class App:
                     finally:
                         response.close()
         finally:
+            self.speaking = False
             self.speaker.amp_off()
+        if note:
+            self.show(note)
 
     # --- header status (battery, Wi-Fi) --------------------------------------------
 
@@ -362,7 +383,12 @@ class App:
         if down:
             self.pending.append(DOWN)
         if main == buttons.TAP:
-            self.pending.append(SPEAK)
+            if self.speaking and self.speaker is not None:
+                self.speaker.cancel()
+                self._cancelled_at = time.ticks_ms()
+                print("speak: cancelled")
+            else:
+                self.pending.append(SPEAK)
         elif main == buttons.HOLD:
             self.pending.append(TOGGLE)
 
@@ -376,7 +402,13 @@ class App:
                     delta += 1 if self.pending.pop(0) == UP else -1
                 self.handle(lambda: self.move(delta))
             elif event == SPEAK:
-                self.handle(self.speak)
+                now = time.ticks_ms()
+                if self._tap_at is not None or (
+                        self._cancelled_at is not None and time.ticks_diff(now, self._cancelled_at) < DOUBLE_TAP_MS):
+                    self._tap_at = self._cancelled_at = None
+                    self.handle(lambda: self.speak(slow=True))
+                else:
+                    self._tap_at = now  # wait for a possible second tap
             elif event == TOGGLE:
                 self.handle(self.toggle_language)
 
@@ -436,6 +468,9 @@ class App:
             self.poll_buttons()
             if self.pending:
                 self.process_pending()
+            elif self._tap_at is not None and time.ticks_diff(time.ticks_ms(), self._tap_at) >= DOUBLE_TAP_MS:
+                self._tap_at = None
+                self.handle(self.speak)
             else:
                 self.warm_glyphs()
                 self.check_status()
@@ -443,7 +478,7 @@ class App:
             # warming run at full speed so they finish quickly.
             with self.lock:
                 thread_busy = any(self.fetching.values()) or self.downloading
-            want = BUSY_MHZ if (self.pending or self._warming or thread_busy) else IDLE_MHZ
+            want = BUSY_MHZ if (self.pending or self._tap_at is not None or self._warming or thread_busy) else IDLE_MHZ
             if want != mhz:
                 machine.freq(want * 1_000_000)
                 mhz = want
