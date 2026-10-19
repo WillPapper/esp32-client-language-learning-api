@@ -7,6 +7,7 @@
     uv run --with pillow python tools/preview.py zh out.png --hidden   # reveal mode, headword only
     uv run --with pillow python tools/preview.py zh out.png --pinyin   # reveal mode, after the first press
     uv run --with pillow python tools/preview.py ja out.png --settings
+    uv run --with pillow python tools/preview.py zh out.png --info      # the controls page
 
 Run from the repository root so the fonts/ directory is found.
 """
@@ -36,7 +37,10 @@ def main(argv):
     state = {"battery": {"percent": 63, "charging": True, "full": False, "mv": 3780}, "online": True}
     flags = [a for a in argv[3:] if a.startswith("--")]
     rest = [a for a in argv[3:] if not a.startswith("--")]
-    if "--settings" in flags:
+    if "--info" in flags:
+        word = {"characters": "请问", "levels": ["HSK1", "HSK3.0-1", "HSK2025-1"]}
+        ui.draw_info(fb, fonts, word, language, state)
+    elif "--settings" in flags:
         rows = [("Volume", "80 %", None), ("Reveal mode", "off", None), ("Sleep after", "2 min", None),
                 ("Word levels  (current language: Mandarin)", None, None),
                 ("HSK1  (158 words)", None, True), ("HSK2  (2 words)", None, False),

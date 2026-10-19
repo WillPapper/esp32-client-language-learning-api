@@ -287,6 +287,47 @@ def draw_settings(fb, fonts, rows, cursor, state=None, hint="● change"):
         _small_arrow(fb, WIDTH - 7, y - 8, up=False)
 
 
+CONTROLS = (
+    ("▲  /  ▼", "next  /  previous word"),
+    ("▲ (reveal mode)", "reveal: pinyin, then all"),
+    ("●", "speak word and sentence"),
+    ("● ●", "speak slowly"),
+    ("● while speaking", "stop  (● again: slow)"),
+    ("hold ●", "Japanese  /  Mandarin"),
+    ("hold ▲", "reveal mode on  /  off"),
+    ("hold ▼", "next example sentence"),
+    ("▲ + ▼", "settings"),
+)
+
+
+def draw_info(fb, fonts, word, language, state=None):
+    """The controls page: the current word with all of its level labels, then every button
+    gesture. Opened from the settings list."""
+    fb.fill(WHITE)
+    _header(fb, fonts, "Controls", None, None, state)
+    y = HEADER_H + 6
+    if word:
+        head = nfont.fit(fonts.body, word.get("characters") or "", WIDTH - 2 * MARGIN)
+        nfont.draw(fb, fonts.body, head, MARGIN, y)
+        y += fonts.body.height
+        levels = levels_of(word) or "no level lists"
+        for line in nfont.wrap(fonts.small, "Levels: " + levels, WIDTH - 2 * MARGIN)[:2]:
+            nfont.draw(fb, fonts.small, line, MARGIN, y)
+            y += fonts.small.height
+        y += 4
+        fb.hline(MARGIN, y, WIDTH - 2 * MARGIN, BLACK)
+        y += 6
+    col = MARGIN + max(fonts.small.width(g) for g, _ in CONTROLS) + 14
+    row_h = fonts.small.height + 2
+    for gesture, action in CONTROLS:
+        if y + row_h > HEIGHT - FOOTER_H:
+            break
+        nfont.draw(fb, fonts.small, gesture, MARGIN, y)
+        nfont.draw(fb, fonts.small, nfont.fit(fonts.small, action, WIDTH - MARGIN - col), col, y)
+        y += row_h
+    _footer(fb, fonts, "any button goes back")
+
+
 def _small_arrow(fb, x, y, up):
     """A 7x4 triangle centred on x, pointing up or down from y."""
     for i in range(4):

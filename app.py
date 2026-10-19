@@ -70,7 +70,7 @@ class App:
         self.language = START_LANGUAGE
         self.settings = settings.Settings()
         self.levels = {lang: None for lang in LANGUAGES}  # [{"level", "words"}] from the API
-        self.mode = "cards"  # or "settings"
+        self.mode = "cards"  # or "settings" or "info" (the controls page)
         self.cursor = 0  # selected settings row
         self.revealed = 0  # reveal mode: how much of the current card is showing (ui.REVEAL_STAGES)
         self.history = {lang: [] for lang in LANGUAGES}
@@ -492,7 +492,13 @@ class App:
         self._active_at = time.ticks_ms()
         while self.pending:
             event = self.pending.pop(0)
-            if self.mode == "settings":
+            if self.mode == "info":
+                if event == SETTINGS:
+                    self.handle(self.close_settings)
+                else:
+                    self.mode = "settings"
+                    self.handle(self.show_settings)
+            elif self.mode == "settings":
                 self.handle(lambda: self.settings_event(event))
             elif event in (UP, DOWN):
                 delta = 1 if event == UP else -1
@@ -507,9 +513,7 @@ class App:
                 self.handle(self.open_settings)
             elif event == SPEAK:
                 now = time.ticks_ms()
-                if self.mode == "settings":
-                    self.handle(lambda: self.settings_event(SPEAK))
-                elif self._tap_at is not None or (
+                if self._tap_at is not None or (
                         self._cancelled_at is not None and time.ticks_diff(now, self._cancelled_at) < DOUBLE_TAP_MS):
                     self._tap_at = self._cancelled_at = None
                     self.handle(lambda: self.speak(slow=True))
@@ -531,7 +535,8 @@ class App:
         current language's levels are listed; with no filter saved they all show as checked."""
         st = self.settings
         lang = self.language
-        rows = [(("volume",), "Volume", "%d %%" % st["volume"], None),
+        rows = [(("info",), "Controls and this word", "open", None),
+                (("volume",), "Volume", "%d %%" % st["volume"], None),
                 (("reveal",), "Reveal mode", "on" if st["reveal"] else "off", None),
                 (("sleep",), "Sleep after", ("%d min" % st["sleep_min"]) if st["sleep_min"] else "never", None),
                 (None, "Word levels  (current language: %s)" % ui.LANGUAGE_NAME_EN[lang],
@@ -559,7 +564,14 @@ class App:
         self.settings["levels"][lang] = chosen
 
     HINTS = {"volume": "● louder  hold ● quieter", "sleep": "● longer  hold ● shorter",
-             "reveal": "● on / off", "level": "● check / uncheck"}
+             "reveal": "● on / off", "level": "● check / uncheck", "info": "● open"}
+
+    def show_info(self):
+        state = self.state()
+        self._status_shown = self._status_seen = self._status_key(state)
+        ui.draw_info(self.epd, self.fonts[self.language], self.current(), self.language, state)
+        self.epd.show()
+        gc.collect()
 
     def show_settings(self):
         all_rows = self.settings_rows()
@@ -604,6 +616,10 @@ class App:
             return
         direction = 1 if event == SPEAK else -1
         key = rows[self.cursor][0]
+        if key[0] == "info":
+            self.mode = "info"
+            self.show_info()
+            return
         if key[0] == "volume":
             v = self.settings.step_volume(direction)
             if self.speaker is not None:
