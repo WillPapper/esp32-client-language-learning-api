@@ -96,8 +96,10 @@ installed.
   `audio.Speaker(volume=...)`, 100 = 0 dB at the DAC; the API's files are normalised to
   -20 dBFS RMS.
 - **Battery.** The header shows a battery icon (filled to the stock firmware's percent curve,
-  a bolt while charging). It is read each time a card is drawn, so it updates on every button
-  press, not on a timer.
+  a bolt while charging). It is read each time a card is drawn, and the idle loop checks it
+  every 0.5 s: when the charging state or the 10 % step differs from what is shown for two
+  reads in a row, the card is redrawn (one partial refresh, about a second after plugging or
+  unplugging the cable).
 - **Power.** While nothing is queued and the prefetch thread is idle, the main loop drops the
   CPU to 80 MHz and goes back to 240 MHz when work arrives. Wi-Fi stays connected in modem
   sleep (MicroPython's default `PM_PERFORMANCE`), the codec and I2S stay powered so a tap plays

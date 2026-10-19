@@ -51,6 +51,9 @@ class App:
         self.speaker = None
         self.speaker_error = None
         self.battery = battery.Battery()
+        self._battery_shown = None  # (charging, full, percent // 10) as last drawn
+        self._battery_seen = None  # the same, as read in the last two checks
+        self._battery_checked = 0
         self.up = buttons.Button(buttons.PIN_UP)
         self.down = buttons.Button(buttons.PIN_DOWN)
         self.main = buttons.Button(buttons.PIN_MAIN)
@@ -80,9 +83,10 @@ class App:
             self.message("Language cards", ["No word loaded."], status)
             return
         t = time.ticks_ms()
+        state = self.battery.read()
+        self._battery_shown = self._battery_seen = self._battery_key(state)
         ui.draw_word(self.epd, self.fonts[self.language], word, self.language,
-                     self.position[self.language], len(self.history[self.language]), status,
-                     self.battery.read())
+                     self.position[self.language], len(self.history[self.language]), status, state)
         drew = time.ticks_diff(time.ticks_ms(), t)
         kind = self.epd.show(full=full)
         print("drew in %d ms, %s refresh in %d ms" % (drew, kind, time.ticks_diff(time.ticks_ms(), t) - drew))
@@ -296,6 +300,28 @@ class App:
         finally:
             self.speaker.amp_off()
 
+    # --- battery -----------------------------------------------------------------
+
+    @staticmethod
+    def _battery_key(state):
+        return (state["charging"], state["full"], state["percent"] // 10)
+
+    def check_battery(self):
+        """Every 500 ms, read the battery; redraw the card when the charging state or the
+        10 % step has been different from what is shown for two reads in a row (1 s)."""
+        now = time.ticks_ms()
+        if time.ticks_diff(now, self._battery_checked) < 500:
+            return
+        self._battery_checked = now
+        key = self._battery_key(self.battery.read())
+        if key == self._battery_shown:
+            self._battery_seen = key
+            return
+        if key == self._battery_seen:
+            print("battery changed:", key)
+            self.handle(self.show)
+        self._battery_seen = key
+
     # --- buttons -----------------------------------------------------------------
 
     def poll_buttons(self):
@@ -383,6 +409,7 @@ class App:
                 self.process_pending()
             else:
                 self.warm_glyphs()
+                self.check_battery()
             # Slow the CPU down while there is nothing to do; the prefetch thread and glyph
             # warming run at full speed so they finish quickly.
             with self.lock:
