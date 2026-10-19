@@ -86,9 +86,13 @@ installed.
   from the HTTPS response straight into `machine.I2S` in 2 KB chunks. MicroPython's I2S cannot
   output MCLK, so the ES8311 is told to derive its master clock from the bit clock; to make that
   clock fast enough (1.024 MHz, an entry in Espressif's coefficient table) the bus runs 32-bit
-  slots and each 16-bit sample is widened in a viper function. GPIO 42 powers the codec and
-  GPIO 46 enables the amplifier; both are pad-held by the stock firmware, so the driver passes
-  `hold=` explicitly.
+  slots and each 16-bit sample is widened in a viper function. The I2S bus starts at boot and
+  keeps running (looping silence between clips) because the codec's state machine needs its
+  clock to finish powering up: initialising the codec and only then starting I2S per clip gave
+  no sound. GPIO 42 powers the codec and GPIO 46 enables the amplifier (only while playing);
+  both are pad-held by the stock firmware, so the driver passes `hold=` explicitly. Volume is
+  `audio.Speaker(volume=...)`, 100 = 0 dB at the DAC; the API's files are normalised to
+  -20 dBFS RMS.
 - **Preview on a Mac.** `uv run --with pillow python tools/preview.py ja out.png` draws a live
   random word with the real `ui.py`; pass a saved JSON response as a third argument, or
   `--message` for the start-up screen.

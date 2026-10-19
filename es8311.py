@@ -84,9 +84,14 @@ class ES8311:
         self.write(0x37, 0x08)
 
     def set_volume(self, percent):
-        """DAC volume, 0-100 (same mapping as Espressif's driver)."""
+        """DAC volume, 0-100: 100 is 0 dB (register 0xBF), each percent below is 0.4 dB quieter
+        down to -40 dB at 1; 0 mutes. The register is 0.5 dB per step, 0xBF = 0 dB, 0xFF = +32 dB."""
         percent = max(0, min(100, percent))
-        self.write(0x32, 0 if percent == 0 else percent * 256 // 100 - 1)
+        if percent == 0:
+            self.write(0x32, 0x00)
+            return
+        db = -40 + 0.4 * percent
+        self.write(0x32, 0xBF + int(round(2 * db)))
 
     def mute(self, on=True):
         reg = self.read(0x31)

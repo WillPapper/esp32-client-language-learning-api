@@ -7,6 +7,10 @@ explicitly (a leftover hold otherwise makes writes silently no-ops).
 The API serves 16 kHz, 16-bit, mono WAV. MicroPython's I2S cannot output MCLK, so the codec
 derives its master clock from the bit clock; to make that clock fast enough (1.024 MHz) the
 I2S bus runs 32-bit mono slots and each 16-bit sample is widened to 32 bits in `_widen()`.
+
+The I2S bus is started once and kept running (looping silence between clips): the codec's
+state machine needs its clock to complete power-up, so the codec is initialised only after the
+clock is present. Creating the I2S per clip after the codec init gave no sound at all.
 """
 import micropython
 import struct
@@ -60,16 +64,20 @@ def parse_wav_header(header):
 
 
 class Speaker:
-    def __init__(self, volume=75):
+    def __init__(self, volume=100):
         Pin(PIN_AUDIO_PWR, Pin.OUT, value=1, hold=True)
         self.amp = Pin(PIN_AMP_EN, Pin.OUT, value=0, hold=False)
         time.sleep_ms(20)
+        self._silence = bytearray(IBUF)
+        self.i2s = I2S(0, sck=Pin(PIN_I2S_BCLK), ws=Pin(PIN_I2S_WS), sd=Pin(PIN_I2S_DOUT),
+                       mode=I2S.TX, bits=32, format=I2S.MONO, rate=RATE, ibuf=IBUF)
+        self.i2s.write(self._silence)  # clocks running before the codec is touched
         self.i2c = I2C(0, sda=Pin(PIN_I2C_SDA), scl=Pin(PIN_I2C_SCL), freq=400_000)
         self.codec = es8311.ES8311(self.i2c)
         self.codec.init(rate=RATE, bits=32)
+        self.codec.mute(False)
         self.volume = volume
         self.codec.set_volume(volume)
-        self.i2s = None
         self._in = bytearray(CHUNK)
         self._out = bytearray(CHUNK * 2)
         self.on_chunk = None  # optional callback run between chunks (e.g. to poll buttons)
@@ -79,17 +87,18 @@ class Speaker:
         self.codec.set_volume(percent)
 
     def _start(self):
-        self.i2s = I2S(0, sck=Pin(PIN_I2S_BCLK), ws=Pin(PIN_I2S_WS), sd=Pin(PIN_I2S_DOUT),
-                       mode=I2S.TX, bits=32, format=I2S.MONO, rate=RATE, ibuf=IBUF)
         self.amp(1)
 
     def _stop(self):
-        # Push half a second of silence so the last real samples leave the DMA buffer
-        # before the amplifier is switched off.
-        self.i2s.write(bytearray(IBUF))
+        # Queue a DMA buffer's worth of silence: the write returns once the last real samples
+        # have left the buffer, and the bus keeps looping silence afterwards.
+        self.i2s.write(self._silence)
         self.amp(0)
+
+    def deinit(self):
+        self.amp(0)
+        self.codec.standby()
         self.i2s.deinit()
-        self.i2s = None
 
     def play_pcm(self, read):
         """Play 16-bit mono PCM at 16 kHz. `read(buf)` fills buf and returns the byte count, 0 at end."""
