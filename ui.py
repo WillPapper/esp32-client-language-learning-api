@@ -224,13 +224,17 @@ def draw_word(fb, fonts, word, language, position, total, status=None, state=Non
         # audio is what a tap plays); hold "down" cycles to the next.
         index = word.get("sentence", 0) % len(sentences)
         block = _sentence_block(fonts, language, sentences[index])
-        height = 10 + sum(font.height * len(lines) for font, lines in block)
+        several = len(sentences) > 1
+        height = (16 if several else 10) + sum(font.height * len(lines) for font, lines in block)
         if y + height <= limit:
-            y += 4
-            fb.hline(MARGIN + 40, y, WIDTH - 2 * (MARGIN + 40), BLACK)
-            if len(sentences) > 1:
-                nfont.draw_right(fb, fonts.small, "hold ▼  %d/%d" % (index + 1, len(sentences)),
-                                 WIDTH - MARGIN, y - fonts.small.height // 2)
+            y += 10 if several else 4
+            right = WIDTH - MARGIN - 40
+            if several:
+                # "hold ▼ 2/4" sits on the divider at the right, with the divider ending before it
+                label = "hold ▼  %d/%d" % (index + 1, len(sentences))
+                right = WIDTH - MARGIN - fonts.small.width(label) - 8
+                nfont.draw_right(fb, fonts.small, label, WIDTH - MARGIN, y - fonts.small.height // 2)
+            fb.hline(MARGIN + 40, y, right - (MARGIN + 40), BLACK)
             y += 6
             for font, lines in block:
                 for line in lines:
@@ -304,9 +308,9 @@ def draw_info(fb, fonts, state=None):
     """The controls page: every button gesture. Opened from the settings list."""
     fb.fill(WHITE)
     _header(fb, fonts, "Controls", None, None, state)
-    y = HEADER_H + 10
+    y = HEADER_H + 8
     col = MARGIN + max(fonts.small.width(g) for g, _ in CONTROLS) + 14
-    row_h = fonts.small.height + 8
+    row_h = fonts.small.height + 6
     for gesture, action in CONTROLS:
         if y + row_h > HEIGHT - FOOTER_H:
             break
