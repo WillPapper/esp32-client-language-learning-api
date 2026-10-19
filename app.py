@@ -49,7 +49,7 @@ POLL_MS = 10
 # the oldest is dropped beyond this. Audio is streamed on each tap and never stored.
 HISTORY_LIMIT = 200
 PREFETCH_WAIT_MS = 25_000
-AUDIO_CACHE_MAX = 10  # WAVs kept in RAM (about 20-50 KB each): word + sentence, current + next
+AUDIO_CACHE_MAX = 16  # WAVs kept in RAM (about 20-50 KB each): word + sentence, normal + slow, current + next
 
 UP, DOWN, SPEAK, TOGGLE = "up", "down", "speak", "toggle"
 UP_HOLD, DOWN_HOLD, SETTINGS = "up_hold", "down_hold", "settings"
@@ -210,9 +210,10 @@ class App:
 
     @staticmethod
     def clips_of(word, slow=False):
-        """Audio URLs a tap plays for this word: the word, then its first example sentence.
-        With `slow`, the slow versions, where the API provides them (`audio.slowUrl`; the
-        endpoint is still being added), else an empty list."""
+        """Audio URLs a tap plays for this word: the word, then the example sentence on screen.
+        `audio` is {"normal": {...} | null, "slow": {...} | null} (slow is the provider's own
+        0.75x delivery); each is null until generated. With `slow`, the slow versions, as far
+        as they exist. Older responses with a flat {"url": ...} are still read."""
         urls = []
         sentences = word.get("sentences") or []
         shown = sentences[word.get("sentence", 0) % len(sentences)] if sentences else None
@@ -220,9 +221,12 @@ class App:
             info = item.get("audio") if item else None
             if not info:
                 continue
-            url = info.get("slowUrl") if slow else info.get("url")
-            if url:
-                urls.append(url)
+            if "normal" in info or "slow" in info:
+                info = info.get("slow" if slow else "normal")
+            elif slow:
+                info = None
+            if info and info.get("url"):
+                urls.append(info["url"])
         return urls
 
     def _wanted_audio(self):
@@ -230,9 +234,10 @@ class App:
         with self.lock:
             candidates = [word, self.prefetched[self.language]]
         urls = []
-        for w in candidates:
-            if w:
-                urls.extend(self.clips_of(w))
+        for slow in (False, True):  # normal clips for both words first, then the slow ones
+            for w in candidates:
+                if w:
+                    urls.extend(self.clips_of(w, slow))
         return urls
 
     def _prefetch_audio(self):
@@ -391,7 +396,7 @@ class App:
         urls = self.clips_of(word, slow)
         note = None
         if slow and not urls:
-            note = "Slow audio is not available yet"
+            note = "No slow audio for this word yet"
             urls = self.clips_of(word)
         if not urls:
             self.show("No audio for this word yet")

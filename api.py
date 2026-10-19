@@ -4,8 +4,10 @@ Only the public, read-only endpoints are used:
     GET /:language/word                 random word with example sentences (the server randomizes);
                                         ?level=N5,N4 limits it to words on any of those levels
     GET /:language/levels               level labels in use, with word counts
-    GET /:language/words/:id/audio      16 kHz 16-bit mono WAV, 404 until generated
+    GET /:language/words/:id/audio      16 kHz 16-bit mono WAV, 404 until generated; ?mode=slow
     GET /:language/sentences/:id/audio  same for a sentence
+The client never builds audio URLs itself: it uses audio.normal.url / audio.slow.url from the
+word JSON.
 """
 import requests
 

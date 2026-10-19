@@ -9,7 +9,7 @@ MicroPython.
 | Up (GPIO 39)             | Next word. At the end of the history, fetches a new random word from the API. In reveal mode the first press reveals the card (Mandarin: pinyin first, then everything on the second press) |
 | Down (GPIO 18)           | Previous word                                                          |
 | Main, tap (GPIO 0)       | Speak the word, then after a 0.5 s pause the example sentence on screen (the API's text-to-speech WAVs). A tap while speaking stops it |
-| Main, double tap         | The same at slow speed, once the API serves slow audio (`audio.slowUrl`); until then normal speed with a note in the footer. A tap right after stopping playback also plays the slow version |
+| Main, double tap         | The same at slow speed (the API's `audio.slow`, the voice's own 0.75× delivery). Words without slow audio yet play at normal speed with a note in the footer. A tap right after stopping playback also plays the slow version |
 | Main, hold (≥ 0.6 s)     | Switch between Japanese and Mandarin. Each language keeps its own history |
 | Up, hold                 | Reveal mode on/off: cards show only the headword until "up" is pressed |
 | Down, hold               | Show the word's next example sentence (cycles)                        |
@@ -82,8 +82,8 @@ installed.
   white flash) the first time, every 10 partials to clear ghosting, and on a language switch.
   Row packing is a viper function (10 ms).
 - **Responsiveness.** A background thread keeps one random word prefetched per language and
-  downloads the WAVs (word and first sentence) for the current and next word into RAM (up to
-  10 cached, 20-50 KB each),
+  downloads the WAVs (word and shown sentence, normal then slow) for the current and next
+  word into RAM (up to 16 cached, 20-50 KB each),
   and the main loop warms the font caches for the next words while idle. So "up" costs one
   partial refresh, a tap speaks at once, and a language switch is one full refresh. Buttons are
   polled while the panel is busy and between audio chunks; presses noticed then are queued, and
