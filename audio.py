@@ -72,6 +72,7 @@ class Speaker:
         self.i2s = None
         self._in = bytearray(CHUNK)
         self._out = bytearray(CHUNK * 2)
+        self.on_chunk = None  # optional callback run between chunks (e.g. to poll buttons)
 
     def set_volume(self, percent):
         self.volume = percent
@@ -104,6 +105,8 @@ class Speaker:
                 _widen(self._in, self._out, n)
                 self.i2s.write(memoryview(self._out)[: n * 2])
                 total += n
+                if self.on_chunk:
+                    self.on_chunk()
         finally:
             self._stop()
         return total
@@ -132,6 +135,25 @@ class Speaker:
             if n:
                 remaining[0] -= n
             return n or 0
+
+        return self.play_pcm(read)
+
+    def play_wav_bytes(self, data):
+        """Play a WAV already in memory (bytes or bytearray)."""
+        rate, channels, bits, data_bytes = parse_wav_header(data)
+        if rate != RATE or channels != 1 or bits != 16:
+            raise WavFormatError("need 16 kHz 16-bit mono, got %d Hz %d ch %d bit" % (rate, channels, bits))
+        mv = memoryview(data)
+        end = min(len(data), 44 + data_bytes)
+        pos = [44]
+
+        def read(buf):
+            n = min(len(buf), end - pos[0])
+            if n <= 0:
+                return 0
+            buf[:n] = mv[pos[0]:pos[0] + n]
+            pos[0] += n
+            return n
 
         return self.play_pcm(read)
 

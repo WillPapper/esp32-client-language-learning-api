@@ -71,3 +71,16 @@ def open_audio(url):
     except (AttributeError, ValueError):
         pass
     return _Body(r.raw), length, r
+
+
+def fetch_audio(url):
+    """The whole WAV for an `audio.url`, as bytes (about 20-50 KB for a word)."""
+    r = _get(url)
+    try:
+        if r.status_code == 404:
+            raise ApiError("no audio generated yet")
+        if r.status_code != 200:
+            raise ApiError("GET %s returned %d" % (url, r.status_code))
+        return r.content
+    finally:
+        r.close()

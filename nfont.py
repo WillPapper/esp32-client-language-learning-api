@@ -19,7 +19,7 @@ def _is_cjk(cp):
 
 
 class Font:
-    def __init__(self, path, cache=400):
+    def __init__(self, path, cache=1500):
         self.path = path
         self.f = open(path, "rb")
         hdr = self.f.read(12)
@@ -37,6 +37,7 @@ class Font:
         self._cache = {}
         self._cache_max = cache
         self._missing = self._find(MISSING)
+        self._idx = {}  # character -> glyph index, memoized (the binary search is Python)
 
     def _find(self, cp):
         idx = self._index
@@ -55,16 +56,25 @@ class Font:
     def has(self, ch):
         return self._find(ord(ch)) >= 0
 
+    def _index_of(self, ch):
+        i = self._idx.get(ch)
+        if i is None:
+            i = self._find(ord(ch))
+            if i < 0:
+                i = self._missing
+            if len(self._idx) >= 4000:
+                self._idx.clear()
+            self._idx[ch] = i
+        return i
+
     def glyph(self, ch):
         """(FrameBuffer, advance) for one character, or None if neither it nor □ exists."""
         g = self._cache.get(ch)
         if g is not None:
             return g
-        i = self._find(ord(ch))
+        i = self._index_of(ch)
         if i < 0:
-            i = self._missing
-            if i < 0:
-                return None
+            return None
         buf = bytearray(self._cell_bytes)
         self.f.seek(self._bitmaps + i * self._cell_bytes)
         self.f.readinto(buf)
@@ -75,9 +85,7 @@ class Font:
         return g
 
     def advance(self, ch):
-        i = self._find(ord(ch))
-        if i < 0:
-            i = self._missing
+        i = self._index_of(ch)
         return self._widths[i] if i >= 0 else 0
 
     def width(self, s):

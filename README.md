@@ -57,9 +57,17 @@ installed.
 
 ## How it works
 
-- **Display.** The e-paper only supports a full refresh in this driver, so every word change
-  redraws the whole screen (about 1.2 s plus packing time). Buttons are not read during a
-  refresh or a fetch.
+- **Display.** `note4_epd.show()` does a partial refresh (about 0.8 s) when it can, telling the
+  panel the previous frame as well as the new one, and a full refresh (about 1.1 s, with a
+  white flash) the first time, every 10 partials to clear ghosting, and on a language switch.
+  Row packing is a viper function (10 ms).
+- **Responsiveness.** A background thread keeps one random word prefetched per language and
+  downloads the WAV for the current and next word into RAM (up to 6 cached, about 40 KB each),
+  and the main loop warms the font caches for the next words while idle. So "up" costs one
+  partial refresh, a tap speaks at once, and a language switch is one full refresh. Buttons are
+  polled while the panel is busy and between audio chunks; presses noticed then are queued, and
+  runs of up/down are merged into one move with a single refresh. Beyond the end of the history
+  several "up" presses fetch only one new word, since random words are interchangeable.
 - **Fonts.** The built-in `framebuf` font is 8×8 ASCII, so CJK text comes from pre-rendered
   bitmaps. `tools/build_font.py` renders every character Shift_JIS (Japanese) or GB2312
   (Chinese) can encode, plus Latin, pinyin tone letters, kana and a few symbols, into a

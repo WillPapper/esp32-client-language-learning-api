@@ -41,6 +41,18 @@ def reading_of(language, item):
     return kana or romaji
 
 
+def texts_of(fonts, word, language):
+    """Every (font, text) pair draw_word() will need, so the glyphs can be cached ahead of time."""
+    out = [(fonts.big, word.get("characters") or ""), (fonts.body, reading_of(language, word)),
+           (fonts.body, (word.get("meaning") or "") + (word.get("partOfSpeech") or "")),
+           (fonts.small, (word.get("level") or "") + "0123456789 /")]
+    for s in word.get("sentences") or []:
+        out.append((fonts.body, s.get("characters") or ""))
+        out.append((fonts.small, (s.get("kana") or "") + (s.get("romaji") or "") + (s.get("pinyin") or "")
+                    + (s.get("translation") or "")))
+    return out
+
+
 def _header(fb, fonts, left, middle, right):
     fb.fill_rect(0, 0, WIDTH, HEADER_H, BLACK)
     y = (HEADER_H - fonts.small.height) // 2
