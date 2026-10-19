@@ -218,3 +218,6 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# Wi-Fi credentials for the device, never commit (copy wifi_secrets.example.py).
+wifi_secrets.py
