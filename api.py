@@ -18,8 +18,10 @@ class ApiError(Exception):
 
 
 def _get(path):
+    # `audio.url` fields are absolute URLs; paths like "/ja/word" are relative to BASE_URL.
+    url = path if path.startswith("http") else BASE_URL + path
     try:
-        return requests.get(BASE_URL + path, headers={"Accept": "application/json, audio/wav"}, timeout=TIMEOUT)
+        return requests.get(url, headers={"Accept": "application/json, audio/wav"}, timeout=TIMEOUT)
     except OSError as e:
         raise ApiError("network error: %s" % e)
 
