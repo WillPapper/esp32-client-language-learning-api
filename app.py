@@ -371,7 +371,9 @@ class App:
         n = len(word.get("sentences") or []) if word else 0
         if not n:
             return
-        drawn, left = self._sentence_lines  # (0, 0) while the card is hidden in reveal mode
+        if self.settings["reveal"] and self.revealed < ui.REVEAL_STAGES[self.language]:
+            return  # a hidden card has nothing to scroll; "down" must not give the answer away
+        drawn, left = self._sentence_lines
         if left:
             word["scroll"] = word.get("scroll", 0) + drawn
         else:
@@ -379,7 +381,6 @@ class App:
             if n < 2:
                 return
             word["sentence"] = (word.get("sentence", 0) + 1) % n
-        self.revealed = ui.REVEAL_STAGES[self.language]
         self.show()
 
     def toggle_reveal(self, on=None):
