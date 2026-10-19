@@ -20,6 +20,9 @@ import wifi
 LANGUAGES = ("ja", "zh")
 START_LANGUAGE = "ja"
 POLL_MS = 10
+# Words kept per language for the down button. Each is a small JSON object in PSRAM (8 MB);
+# the oldest is dropped beyond this. Audio is streamed on each tap and never stored.
+HISTORY_LIMIT = 200
 
 
 class App:
@@ -64,8 +67,11 @@ class App:
         word = api.random_word(self.language)
         if current is not None and word.get("id") == current.get("id"):
             word = api.random_word(self.language)  # the server picked the same word; try once more
-        self.history[self.language].append(word)
-        self.position[self.language] = len(self.history[self.language]) - 1
+        history = self.history[self.language]
+        history.append(word)
+        if len(history) > HISTORY_LIMIT:
+            del history[0]
+        self.position[self.language] = len(history) - 1
         print("word:", self.language, word.get("id"), word.get("characters"), "-", word.get("meaning"))
 
     def next_word(self):
