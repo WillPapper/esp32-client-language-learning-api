@@ -229,8 +229,8 @@ def draw_word(fb, fonts, word, language, position, total, status=None, state=Non
             y += 4
             fb.hline(MARGIN + 40, y, WIDTH - 2 * (MARGIN + 40), BLACK)
             if len(sentences) > 1:
-                nfont.draw_right(fb, fonts.small, "%d/%d" % (index + 1, len(sentences)), WIDTH - MARGIN,
-                                 y - fonts.small.height // 2)
+                nfont.draw_right(fb, fonts.small, "hold ▼  %d/%d" % (index + 1, len(sentences)),
+                                 WIDTH - MARGIN, y - fonts.small.height // 2)
             y += 6
             for font, lines in block:
                 for line in lines:
@@ -300,25 +300,13 @@ CONTROLS = (
 )
 
 
-def draw_info(fb, fonts, word, language, state=None):
-    """The controls page: the current word with all of its level labels, then every button
-    gesture. Opened from the settings list."""
+def draw_info(fb, fonts, state=None):
+    """The controls page: every button gesture. Opened from the settings list."""
     fb.fill(WHITE)
     _header(fb, fonts, "Controls", None, None, state)
-    y = HEADER_H + 6
-    if word:
-        head = nfont.fit(fonts.body, word.get("characters") or "", WIDTH - 2 * MARGIN)
-        nfont.draw(fb, fonts.body, head, MARGIN, y)
-        y += fonts.body.height
-        levels = levels_of(word) or "no level lists"
-        for line in nfont.wrap(fonts.small, "Levels: " + levels, WIDTH - 2 * MARGIN)[:2]:
-            nfont.draw(fb, fonts.small, line, MARGIN, y)
-            y += fonts.small.height
-        y += 4
-        fb.hline(MARGIN, y, WIDTH - 2 * MARGIN, BLACK)
-        y += 6
+    y = HEADER_H + 10
     col = MARGIN + max(fonts.small.width(g) for g, _ in CONTROLS) + 14
-    row_h = fonts.small.height + 2
+    row_h = fonts.small.height + 8
     for gesture, action in CONTROLS:
         if y + row_h > HEIGHT - FOOTER_H:
             break

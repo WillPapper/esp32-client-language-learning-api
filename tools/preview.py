@@ -38,8 +38,7 @@ def main(argv):
     flags = [a for a in argv[3:] if a.startswith("--")]
     rest = [a for a in argv[3:] if not a.startswith("--")]
     if "--info" in flags:
-        word = {"characters": "请问", "levels": ["HSK1", "HSK3.0-1", "HSK2025-1"]}
-        ui.draw_info(fb, fonts, word, language, state)
+        ui.draw_info(fb, fonts, state)
     elif "--settings" in flags:
         rows = [("Volume", "80 %", None), ("Reveal mode", "off", None), ("Sleep after", "2 min", None),
                 ("Word levels  (current language: Mandarin)", None, None),

@@ -20,9 +20,8 @@ or pinyin), the meaning and part of speech, and one example sentence with its re
 translation. The sentence is picked at random when the word is fetched (every word has two or
 four), and its audio is what a tap plays; the small `2/4` by the divider says which one is up.
 
-**Controls page**: the first row of the settings list, "Controls and this word", opens a page
-that lists every gesture above and the current word with all of its level labels (the header
-only has room for the first few). Any button returns to settings.
+**Controls page**: the first row of the settings list, "Controls", opens a page that lists
+every gesture above. Any button returns to settings.
 
 **Settings** (up + down together): up/down move, the main button changes the selected row
 (the footer says how: tap for louder or longer, hold for quieter or shorter; tap toggles

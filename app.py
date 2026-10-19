@@ -535,7 +535,7 @@ class App:
         current language's levels are listed; with no filter saved they all show as checked."""
         st = self.settings
         lang = self.language
-        rows = [(("info",), "Controls and this word", "open", None),
+        rows = [(("info",), "Controls", "open", None),
                 (("volume",), "Volume", "%d %%" % st["volume"], None),
                 (("reveal",), "Reveal mode", "on" if st["reveal"] else "off", None),
                 (("sleep",), "Sleep after", ("%d min" % st["sleep_min"]) if st["sleep_min"] else "never", None),
@@ -569,7 +569,7 @@ class App:
     def show_info(self):
         state = self.state()
         self._status_shown = self._status_seen = self._status_key(state)
-        ui.draw_info(self.epd, self.fonts[self.language], self.current(), self.language, state)
+        ui.draw_info(self.epd, self.fonts[self.language], state)
         self.epd.show()
         gc.collect()
 
