@@ -20,6 +20,7 @@ import sys
 import time
 
 import api
+import battery
 import buttons
 import note4_epd
 import ui
@@ -35,6 +36,9 @@ PREFETCH_WAIT_MS = 25_000
 AUDIO_CACHE_MAX = 10  # WAVs kept in RAM (about 20-50 KB each): word + sentence, current + next
 
 UP, DOWN, SPEAK, TOGGLE = "up", "down", "speak", "toggle"
+# CPU clock while idle (nothing queued, no prefetch or glyph warming in progress) and while busy.
+IDLE_MHZ = 80
+BUSY_MHZ = 240
 
 
 class App:
@@ -46,6 +50,7 @@ class App:
         self.position = {lang: -1 for lang in LANGUAGES}
         self.speaker = None
         self.speaker_error = None
+        self.battery = battery.Battery()
         self.up = buttons.Button(buttons.PIN_UP)
         self.down = buttons.Button(buttons.PIN_DOWN)
         self.main = buttons.Button(buttons.PIN_MAIN)
@@ -56,6 +61,7 @@ class App:
         self.fetching = {lang: False for lang in LANGUAGES}
         self.fetch_error = None
         self.audio_cache = {}  # audio url -> WAV bytes, filled by the thread
+        self.downloading = False  # set by the thread around audio downloads
         self.lock = _thread.allocate_lock()
         self.net_lock = _thread.allocate_lock()  # one HTTPS connection at a time
         self._warming = None  # generator loading glyphs for the next word, run while idle
@@ -64,7 +70,7 @@ class App:
     # --- display -----------------------------------------------------------------
 
     def message(self, title, lines, footer=None):
-        ui.draw_message(self.epd, self.fonts[self.language], title, lines, footer)
+        ui.draw_message(self.epd, self.fonts[self.language], title, lines, footer, self.battery.read())
         self.epd.show()
         gc.collect()
 
@@ -75,7 +81,8 @@ class App:
             return
         t = time.ticks_ms()
         ui.draw_word(self.epd, self.fonts[self.language], word, self.language,
-                     self.position[self.language], len(self.history[self.language]), status)
+                     self.position[self.language], len(self.history[self.language]), status,
+                     self.battery.read())
         drew = time.ticks_diff(time.ticks_ms(), t)
         kind = self.epd.show(full=full)
         print("drew in %d ms, %s refresh in %d ms" % (drew, kind, time.ticks_diff(time.ticks_ms(), t) - drew))
@@ -139,6 +146,8 @@ class App:
         wanted = self._wanted_audio()
         for url in wanted:
             if url not in self.audio_cache:
+                with self.lock:
+                    self.downloading = True
                 try:
                     with self.net_lock:
                         data = api.fetch_audio(url)
@@ -148,6 +157,9 @@ class App:
                 except Exception as e:
                     print("audio prefetch:", e)
                     time.sleep(5)
+                finally:
+                    with self.lock:
+                        self.downloading = False
                 break
         if len(self.audio_cache) > AUDIO_CACHE_MAX:
             with self.lock:
@@ -363,12 +375,22 @@ class App:
     def run(self):
         self.start()
         print("ready: up = next, down = back, tap = speak, hold = switch language")
+        import machine
+        mhz = 0
         while True:
             self.poll_buttons()
             if self.pending:
                 self.process_pending()
             else:
                 self.warm_glyphs()
+            # Slow the CPU down while there is nothing to do; the prefetch thread and glyph
+            # warming run at full speed so they finish quickly.
+            with self.lock:
+                thread_busy = any(self.fetching.values()) or self.downloading
+            want = BUSY_MHZ if (self.pending or self._warming or thread_busy) else IDLE_MHZ
+            if want != mhz:
+                machine.freq(want * 1_000_000)
+                mhz = want
             time.sleep_ms(POLL_MS)
 
 

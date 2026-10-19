@@ -31,7 +31,8 @@ def main(argv):
     fonts = ui.Fonts(language)
     fb = framebuf.FrameBuffer(bytearray(ui.WIDTH * ui.HEIGHT // 8), ui.WIDTH, ui.HEIGHT, framebuf.MONO_HLSB)
     if len(argv) > 3 and argv[3] == "--message":
-        ui.draw_message(fb, fonts, "Language cards", ["Connecting to Wi-Fi…"])
+        ui.draw_message(fb, fonts, "Language cards", ["Connecting to Wi-Fi…"],
+                        battery={"percent": 20, "charging": False, "full": False, "mv": 3600})
     else:
         if len(argv) > 3:
             with open(argv[3], encoding="utf-8") as f:
@@ -40,7 +41,8 @@ def main(argv):
             with urllib.request.urlopen(BASE_URL + "/%s/word" % language, timeout=20) as r:
                 word = json.load(r)
         print(json.dumps(word, ensure_ascii=False)[:300])
-        ui.draw_word(fb, fonts, word, language, 2, 5, argv[4] if len(argv) > 4 else None)
+        ui.draw_word(fb, fonts, word, language, 2, 5, argv[4] if len(argv) > 4 else None,
+                     battery={"percent": 63, "charging": True, "full": False, "mv": 3780})
     fb.to_image().save(out)
     print("wrote", out)
 

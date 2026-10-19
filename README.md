@@ -48,6 +48,7 @@ installed.
 | `audio.py` | Speaker: ES8311 over I2C, 16-bit mono PCM over I2S, amp enable, WAV streaming |
 | `es8311.py` | Minimal ES8311 register driver (playback only) |
 | `buttons.py` | Polled buttons with tap / hold detection |
+| `battery.py` | Battery voltage (ADC on GPIO 4), percent and charging state (GPIO 2 / GPIO 1) |
 | `note4_epd.py` | E-paper driver (full refresh only, about 1.2 s) |
 | `wifi.py` | `wifi.connect()` with readable errors |
 | `fonts/` | Noto Sans CJK JP and SC rendered to bitmaps at 40, 22 and 16 px (SIL OFL 1.1) |
@@ -94,6 +95,16 @@ installed.
   both are pad-held by the stock firmware, so the driver passes `hold=` explicitly. Volume is
   `audio.Speaker(volume=...)`, 100 = 0 dB at the DAC; the API's files are normalised to
   -20 dBFS RMS.
+- **Battery.** The header shows a battery icon (filled to the stock firmware's percent curve,
+  a bolt while charging). It is read each time a card is drawn, so it updates on every button
+  press, not on a timer.
+- **Power.** While nothing is queued and the prefetch thread is idle, the main loop drops the
+  CPU to 80 MHz and goes back to 240 MHz when work arrives. Wi-Fi stays connected in modem
+  sleep (MicroPython's default `PM_PERFORMANCE`), the codec and I2S stay powered so a tap plays
+  at once, and the e-paper draws nothing between refreshes. Idle draw is not measured; expect
+  tens of milliamps, mostly the Wi-Fi radio. The stock firmware additionally shuts the unit
+  down after five idle minutes by dropping the battery latch (GPIO 17), which this app does not
+  do yet.
 - **Preview on a Mac.** `uv run --with pillow python tools/preview.py ja out.png` draws a live
   random word with the real `ui.py`; pass a saved JSON response as a third argument, or
   `--message` for the start-up screen.

@@ -53,10 +53,39 @@ def texts_of(fonts, word, language):
     return out
 
 
-def _header(fb, fonts, left, middle, right):
+BATTERY_W = 24
+BATTERY_H = 12
+
+
+def draw_battery(fb, x, y, battery, ink=WHITE):
+    """A battery outline with its charge level filled in; a bolt while charging.
+    `battery` is the dict from battery.Battery.read(), or None to draw nothing."""
+    if not battery:
+        return x
+    bg = 1 - ink
+    fb.rect(x, y, BATTERY_W - 2, BATTERY_H, ink)
+    fb.fill_rect(x + BATTERY_W - 2, y + 3, 2, BATTERY_H - 6, ink)  # the terminal nub
+    inner = BATTERY_W - 6
+    fill = (inner * battery.get("percent", 0) + 50) // 100
+    if battery.get("full"):
+        fill = inner
+    if fill:
+        fb.fill_rect(x + 2, y + 2, fill, BATTERY_H - 4, ink)
+    if battery.get("charging") and not battery.get("full"):
+        # A small bolt drawn in the background colour over the fill, and ink over the empty part
+        bx = x + BATTERY_W // 2 - 4
+        for i, (dx, w) in enumerate(((3, 3), (2, 3), (1, 3), (0, 5), (3, 3), (2, 3), (1, 3), (0, 2))):
+            yy = y + 2 + i
+            c = bg if bx + dx < x + 2 + fill else ink
+            fb.fill_rect(bx + dx, yy, w, 1, c)
+    return x + BATTERY_W + 6
+
+
+def _header(fb, fonts, left, middle, right, battery=None):
     fb.fill_rect(0, 0, WIDTH, HEADER_H, BLACK)
     y = (HEADER_H - fonts.small.height) // 2
-    nfont.draw(fb, fonts.small, left, MARGIN, y, ink=WHITE)
+    x = draw_battery(fb, MARGIN, (HEADER_H - BATTERY_H) // 2, battery)
+    nfont.draw(fb, fonts.small, left, x, y, ink=WHITE)
     if middle:
         nfont.draw_centered(fb, fonts.small, middle, y, ink=WHITE, w=WIDTH)
     if right:
@@ -97,12 +126,12 @@ def _sentence_block(fonts, language, s):
     return block
 
 
-def draw_word(fb, fonts, word, language, position, total, status=None):
+def draw_word(fb, fonts, word, language, position, total, status=None, battery=None):
     """Lay out one vocabulary card. `position` is 0-based within `total` words seen."""
     fb.fill(WHITE)
     level = word.get("level") or ""
     pos = word.get("partOfSpeech") or ""
-    _header(fb, fonts, LANGUAGE_NAME[language], level, "%d / %d" % (position + 1, total))
+    _header(fb, fonts, LANGUAGE_NAME[language], level, "%d / %d" % (position + 1, total), battery)
 
     limit = HEIGHT - FOOTER_H - 2
     y = HEADER_H + 6
@@ -142,10 +171,10 @@ def draw_word(fb, fonts, word, language, position, total, status=None):
         _footer(fb, fonts, "▲ next   ▼ back   ● speak   hold ● for " + LANGUAGE_NAME_EN[OTHER[language]])
 
 
-def draw_message(fb, fonts, title, lines, footer=None):
+def draw_message(fb, fonts, title, lines, footer=None, battery=None):
     """A plain screen: a title bar, then up to a few lines of text."""
     fb.fill(WHITE)
-    _header(fb, fonts, title, None, None)
+    _header(fb, fonts, title, None, None, battery)
     y = HEADER_H + 24
     for text in lines:
         y = _lines(fb, fonts.body, text, y, HEIGHT - FOOTER_H, 3)
