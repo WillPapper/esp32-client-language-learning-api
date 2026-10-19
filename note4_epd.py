@@ -125,7 +125,10 @@ class EPD(framebuf.FrameBuffer):
         return value
 
     def show(self):
-        """Full refresh of the whole screen (about 1.2 s). Returns the signed temperature reading."""
+        """Full refresh of the whole screen (about 1.3 s). Returns the signed temperature reading."""
+        # The stock firmware runs EPD_Init() before every EPD_Display(). Without this reset the
+        # second refresh after power-up never finishes (BUSY stays low).
+        self._init_panel()
         raw = self.read_temperature()
         # Temperature-compensation setting, same table as the stock driver.
         if raw <= 5:

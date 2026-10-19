@@ -2,7 +2,9 @@
 # Copy the app to the NOTE4 over USB with mpremote, then reset it so main.py starts.
 #
 #   tools/deploy.sh            # code and wifi_secrets.py only (a few seconds)
-#   tools/deploy.sh --fonts    # also the 6.8 MB of fonts (first install, or after rebuilding them)
+#   tools/deploy.sh --fonts    # also check fonts/: uploads only files missing on the device or
+#                              # of a different size (a full upload is 6.8 MB at about 5 KB/s,
+#                              # 25 minutes). Fonts persist in flash, so this is needed once.
 #   PORT=/dev/cu.usbmodemXXXX tools/deploy.sh
 #
 # Needs wifi_secrets.py next to this repo's code (copy wifi_secrets.example.py and fill it in).
@@ -17,8 +19,8 @@ if [ ! -f wifi_secrets.py ]; then
     exit 1
 fi
 
-# Stop whatever is running (main.py loops forever) so the file copies go through.
-$MP exec --no-follow "pass" >/dev/null 2>&1 || true
+# Any exec interrupts main.py (it loops forever) so the file copies go through.
+$MP exec "pass" >/dev/null 2>&1 || true
 
 CODE="main.py app.py ui.py nfont.py api.py audio.py es8311.py buttons.py note4_epd.py wifi.py wifi_secrets.py"
 for f in $CODE; do
@@ -26,9 +28,24 @@ for f in $CODE; do
 done
 
 if [ "${1:-}" = "--fonts" ]; then
-    $MP fs mkdir :fonts >/dev/null 2>&1 || true
+    # Sizes of the fonts already on the device, one "name size" per line.
+    on_device=$($MP exec "
+import os
+try:
+    os.mkdir('fonts')
+except OSError:
+    pass
+for e in os.ilistdir('fonts'):
+    print(e[0], e[3])
+")
     for f in fonts/*.nf1; do
-        $MP fs cp "$f" ":$f"
+        name=$(basename "$f")
+        size=$(wc -c < "$f" | tr -d ' ')
+        if echo "$on_device" | grep -q "^$name $size$"; then
+            echo "fonts/$name already on the device"
+        else
+            $MP fs cp "$f" ":fonts/$name"
+        fi
     done
 fi
 

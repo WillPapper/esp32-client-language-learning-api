@@ -30,6 +30,12 @@ mpremote connect /dev/cu.usbmodem2101 repl   # watch the log; Ctrl-C stops the a
 
 `wifi_secrets.py` is git-ignored. The API base URL is in `api.py`.
 
+The fonts stay in the device's flash filesystem across resets and code deploys, so they are
+uploaded once. `--fonts` compares sizes and only sends files that are missing or changed; a full
+upload is about 25 minutes (mpremote moves roughly 5 KB/s). Only `esptool erase-flash` or
+reflashing MicroPython removes them. The 14 MB filesystem has about 7 MB free with the fonts
+installed.
+
 ## Files
 
 | File | What |
