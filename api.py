@@ -1,7 +1,9 @@
 """Client for the language-learning-api Worker (see ../language-learning-api/README.md).
 
 Only the public, read-only endpoints are used:
-    GET /:language/word                 random word with example sentences (the server randomizes)
+    GET /:language/word                 random word with example sentences (the server randomizes);
+                                        ?level=N5,N4 limits it to words on any of those levels
+    GET /:language/levels               level labels in use, with word counts
     GET /:language/words/:id/audio      16 kHz 16-bit mono WAV, 404 until generated
     GET /:language/sentences/:id/audio  same for a sentence
 """
@@ -26,13 +28,30 @@ def _get(path):
         raise ApiError("network error: %s" % e)
 
 
-def random_word(language):
-    """A random word in `language` ("ja" or "zh"), as the API's JSON object."""
-    r = _get("/%s/word" % language)
+def random_word(language, levels=None):
+    """A random word in `language` ("ja" or "zh"), as the API's JSON object. `levels` limits it
+    to words on any of those level labels (e.g. ["N5", "N4"]); empty or None means every word."""
+    path = "/%s/word" % language
+    if levels:
+        path += "?level=" + ",".join(levels)
+    r = _get(path)
+    try:
+        if r.status_code == 404:
+            raise ApiError("no words on levels %s" % ",".join(levels or []))
+        if r.status_code != 200:
+            raise ApiError("GET %s returned %d" % (path, r.status_code))
+        return r.json()
+    finally:
+        r.close()
+
+
+def levels(language):
+    """[{"level": "N5", "words": 24}, ...] for the language."""
+    r = _get("/%s/levels" % language)
     try:
         if r.status_code != 200:
-            raise ApiError("GET /%s/word returned %d" % (language, r.status_code))
-        return r.json()
+            raise ApiError("GET /%s/levels returned %d" % (language, r.status_code))
+        return r.json().get("levels") or []
     finally:
         r.close()
 

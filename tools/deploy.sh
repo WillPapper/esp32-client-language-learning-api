@@ -22,7 +22,7 @@ fi
 # Any exec interrupts main.py (it loops forever) so the file copies go through.
 $MP exec "pass" >/dev/null 2>&1 || true
 
-CODE="main.py app.py ui.py nfont.py api.py audio.py es8311.py buttons.py note4_epd.py wifi.py wifi_secrets.py"
+CODE="main.py app.py ui.py nfont.py api.py audio.py es8311.py buttons.py battery.py settings.py note4_epd.py wifi.py wifi_secrets.py"
 for f in $CODE; do
     $MP fs cp "$f" ":$f"
 done

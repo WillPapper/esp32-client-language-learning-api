@@ -6,8 +6,12 @@
     Main button double tap  the same, slowly (once the API serves slow audio)
     Main button tap while speaking   stop; a second tap right after plays the slow version
     Main button hold        switch between Japanese and Mandarin (each keeps its own history)
+    Up button hold          reveal mode on/off (cards show only the headword until "up")
+    Down button hold        show the word's next example sentence
+    Up + down together      open or close the settings screen (levels, volume, reveal, sleep)
 
-Only one language is shown at a time.
+Only one language is shown at a time. Each card shows one example sentence, chosen at random
+when the word is fetched; a tap plays the word and that sentence.
 
 Responsiveness: a background thread keeps one random word prefetched per language and
 downloads the audio for the current and the next word into RAM, and the main loop warms the
@@ -18,6 +22,7 @@ several words with a single refresh.
 """
 import _thread
 import gc
+import random
 import sys
 import time
 
@@ -25,6 +30,7 @@ import api
 import battery
 import buttons
 import note4_epd
+import settings
 import ui
 import wifi
 
@@ -38,6 +44,9 @@ PREFETCH_WAIT_MS = 25_000
 AUDIO_CACHE_MAX = 10  # WAVs kept in RAM (about 20-50 KB each): word + sentence, current + next
 
 UP, DOWN, SPEAK, TOGGLE = "up", "down", "speak", "toggle"
+UP_HOLD, DOWN_HOLD, SETTINGS = "up_hold", "down_hold", "settings"
+# Level labels per language until GET /:language/levels has answered.
+KNOWN_LEVELS = {"ja": ["N5", "N4", "N3", "N2", "N1"], "zh": ["HSK1", "HSK2", "HSK3.0-1", "HSK2025-1"]}
 DOUBLE_TAP_MS = 350  # a second tap within this window of the first makes a double tap
 # CPU clock while idle (nothing queued, no prefetch or glyph warming in progress) and while busy.
 IDLE_MHZ = 80
@@ -49,6 +58,11 @@ class App:
         self.epd = note4_epd.EPD()
         self.fonts = {lang: ui.Fonts(lang) for lang in LANGUAGES}
         self.language = START_LANGUAGE
+        self.settings = settings.Settings()
+        self.levels = {lang: None for lang in LANGUAGES}  # [{"level", "words"}] from the API
+        self.mode = "cards"  # or "settings"
+        self.cursor = 0  # selected settings row
+        self.revealed = False  # reveal mode: the current card's details are showing
         self.history = {lang: [] for lang in LANGUAGES}
         self.position = {lang: -1 for lang in LANGUAGES}
         self.speaker = None
@@ -63,6 +77,7 @@ class App:
         self.down = buttons.Button(buttons.PIN_DOWN)
         self.main = buttons.Button(buttons.PIN_MAIN)
         self.pending = []  # button events noticed while busy, handled by the main loop
+        self._chord = False  # up and down pressed together; their releases are swallowed
         self.speaking = False  # inside speak(); a main-button tap then cancels instead of queueing
         self._tap_at = None  # ticks of a first tap, waiting DOUBLE_TAP_MS for a second one
         self._cancelled_at = None  # ticks when a tap stopped playback (a quick second tap = slow)
@@ -92,6 +107,9 @@ class App:
         gc.collect()
 
     def show(self, status=None, full=False):
+        if self.mode == "settings":
+            self.show_settings()
+            return
         word = self.current()
         if word is None:
             self.message("Language cards", ["No word loaded."], status)
@@ -99,8 +117,9 @@ class App:
         t = time.ticks_ms()
         state = self.state()
         self._status_shown = self._status_seen = self._status_key(state)
+        hidden = self.settings["reveal"] and not self.revealed
         ui.draw_word(self.epd, self.fonts[self.language], word, self.language,
-                     self.position[self.language], len(self.history[self.language]), status, state)
+                     self.position[self.language], len(self.history[self.language]), status, state, hidden)
         drew = time.ticks_diff(time.ticks_ms(), t)
         kind = self.epd.show(full=full)
         print("drew in %d ms, %s refresh in %d ms" % (drew, kind, time.ticks_diff(time.ticks_ms(), t) - drew))
@@ -129,10 +148,27 @@ class App:
             time.sleep(5)
         return self.online
 
+    def _fetch_levels(self):
+        for lang in LANGUAGES:
+            if self.levels[lang] is None:
+                try:
+                    with self.net_lock:
+                        self.levels[lang] = api.levels(lang)
+                except Exception as e:
+                    print("levels:", e)
+
+    @staticmethod
+    def prepare(word):
+        """Pick the example sentence this card shows (and its tap plays), at random."""
+        n = len(word.get("sentences") or [])
+        word["sentence"] = random.randrange(n) if n else 0
+        return word
+
     def _prefetch_loop(self):
         while True:
             if not self._ensure_online():
                 continue
+            self._fetch_levels()
             for lang in (self.language, ui.OTHER[self.language]):
                 with self.lock:
                     needed = self.prefetched[lang] is None and not self.fetching[lang]
@@ -141,10 +177,12 @@ class App:
                 if not needed:
                     continue
                 try:
+                    levels = self.settings.levels(lang)
                     with self.net_lock:
-                        word = api.random_word(lang)
+                        word = self.prepare(api.random_word(lang, levels))
                     with self.lock:
-                        self.prefetched[lang] = word
+                        if self.settings.levels(lang) == levels:  # not changed meanwhile
+                            self.prefetched[lang] = word
                         self.fetch_error = None
                 except Exception as e:
                     with self.lock:
@@ -164,7 +202,8 @@ class App:
         endpoint is still being added), else an empty list."""
         urls = []
         sentences = word.get("sentences") or []
-        for item in (word, sentences[0] if sentences else None):
+        shown = sentences[word.get("sentence", 0) % len(sentences)] if sentences else None
+        for item in (word, shown):
             info = item.get("audio") if item else None
             if not info:
                 continue
@@ -254,7 +293,7 @@ class App:
                 if error is not None and time.ticks_diff(time.ticks_ms(), start) > 2000:
                     raise api.ApiError(str(error))
                 with self.net_lock:
-                    return api.random_word(lang)
+                    return self.prepare(api.random_word(lang, self.settings.levels(lang)))
             if time.ticks_diff(time.ticks_ms(), start) > PREFETCH_WAIT_MS:
                 raise api.ApiError("timed out waiting for a word")
             self.poll_buttons()
@@ -278,6 +317,11 @@ class App:
         new random words are all the same to the user, so only one is fetched."""
         if delta == 0:
             return
+        if self.settings["reveal"] and delta > 0 and not self.revealed:
+            self.revealed = True  # the first "up" on a hidden card reveals it
+            self.show()
+            return
+        self.revealed = False
         pos = self.position[self.language]
         last = len(self.history[self.language]) - 1
         if delta < 0:
@@ -300,8 +344,25 @@ class App:
     def previous_word(self):
         self.move(-1)
 
+    def next_sentence(self):
+        word = self.current()
+        n = len(word.get("sentences") or []) if word else 0
+        if n < 2:
+            return
+        word["sentence"] = (word.get("sentence", 0) + 1) % n
+        self.revealed = True
+        self.show()
+
+    def toggle_reveal(self, on=None):
+        self.settings["reveal"] = (not self.settings["reveal"]) if on is None else on
+        self.settings.save()
+        self.revealed = False
+        print("reveal mode:", self.settings["reveal"])
+        self.show("Reveal mode on: ▲ shows the answer" if self.settings["reveal"] else "Reveal mode off")
+
     def toggle_language(self):
         self.language = ui.OTHER[self.language]
+        self.revealed = False
         print("language:", self.language)
         if not self.history[self.language]:
             self.fetch()
@@ -378,10 +439,23 @@ class App:
         up = self.up.poll()
         down = self.down.poll()
         main = self.main.poll()
-        if up:
+        if self.up.pressed() and self.down.pressed():
+            if not self._chord:
+                self._chord = True
+                self.pending.append(SETTINGS)
+            up = down = None
+        elif self._chord:
+            up = down = None  # the releases of a chord are not presses
+            if not self.up.pressed() and not self.down.pressed():
+                self._chord = False
+        if up == buttons.TAP:
             self.pending.append(UP)
-        if down:
+        elif up == buttons.HOLD:
+            self.pending.append(UP_HOLD)
+        if down == buttons.TAP:
             self.pending.append(DOWN)
+        elif down == buttons.HOLD:
+            self.pending.append(DOWN_HOLD)
         if main == buttons.TAP:
             if self.speaking and self.speaker is not None:
                 self.speaker.cancel()
@@ -396,14 +470,24 @@ class App:
         """Handle queued events in order, merging runs of up/down into one move."""
         while self.pending:
             event = self.pending.pop(0)
-            if event in (UP, DOWN):
+            if self.mode == "settings":
+                self.handle(lambda: self.settings_event(event))
+            elif event in (UP, DOWN):
                 delta = 1 if event == UP else -1
-                while self.pending and self.pending[0] in (UP, DOWN):
+                while self.pending and self.pending[0] in (UP, DOWN) and not self.settings["reveal"]:
                     delta += 1 if self.pending.pop(0) == UP else -1
                 self.handle(lambda: self.move(delta))
+            elif event == UP_HOLD:
+                self.handle(self.toggle_reveal)
+            elif event == DOWN_HOLD:
+                self.handle(self.next_sentence)
+            elif event == SETTINGS:
+                self.handle(self.open_settings)
             elif event == SPEAK:
                 now = time.ticks_ms()
-                if self._tap_at is not None or (
+                if self.mode == "settings":
+                    self.handle(lambda: self.settings_event(SPEAK))
+                elif self._tap_at is not None or (
                         self._cancelled_at is not None and time.ticks_diff(now, self._cancelled_at) < DOUBLE_TAP_MS):
                     self._tap_at = self._cancelled_at = None
                     self.handle(lambda: self.speak(slow=True))
@@ -411,6 +495,79 @@ class App:
                     self._tap_at = now  # wait for a possible second tap
             elif event == TOGGLE:
                 self.handle(self.toggle_language)
+
+    # --- settings screen ---------------------------------------------------------
+
+    def settings_rows(self):
+        """[(key, label, value, checked)] for ui.draw_settings, in display order."""
+        st = self.settings
+        rows = [(("volume",), "Volume", "%d %%" % st["volume"], None),
+                (("reveal",), "Reveal mode", "on" if st["reveal"] else "off", None),
+                (("sleep",), "Sleep after", ("%d min" % st["sleep_min"]) if st["sleep_min"] else "never", None)]
+        for lang in LANGUAGES:
+            chosen = st.levels(lang)
+            known = self.levels[lang]
+            if known is None:
+                known = [{"level": name, "words": None} for name in KNOWN_LEVELS[lang]]
+            for item in known:
+                name = item["level"]
+                label = "%s  %s" % (ui.LANGUAGE_NAME[lang], name)
+                if item.get("words"):
+                    label += "  (%d)" % item["words"]
+                rows.append((("level", lang, name), label, None, name in chosen))
+        return rows
+
+    def show_settings(self):
+        rows = [(label, value, checked) for _, label, value, checked in self.settings_rows()]
+        state = self.state()
+        self._status_shown = self._status_seen = self._status_key(state)
+        ui.draw_settings(self.epd, self.fonts[self.language], rows, self.cursor, state)
+        self.epd.show()
+        gc.collect()
+
+    def open_settings(self):
+        self.mode = "settings"
+        self.cursor = 0
+        self._levels_before = {lang: self.settings.levels(lang) for lang in LANGUAGES}
+        self.show_settings()
+
+    def close_settings(self):
+        self.settings.save()
+        self.mode = "cards"
+        for lang in LANGUAGES:
+            if self.settings.levels(lang) != self._levels_before[lang]:
+                with self.lock:
+                    self.prefetched[lang] = None  # fetched under the old filter
+                print("levels:", lang, self.settings.levels(lang) or "all")
+        self.show(full=True)
+
+    def settings_event(self, event):
+        rows = self.settings_rows()
+        if event == SETTINGS:
+            self.close_settings()
+            return
+        if event in (UP, DOWN):
+            self.cursor = (self.cursor + (-1 if event == UP else 1)) % len(rows)
+            self.show_settings()
+            return
+        if event not in (SPEAK, TOGGLE):
+            return
+        direction = 1 if event == SPEAK else -1
+        key = rows[self.cursor][0]
+        if key[0] == "volume":
+            v = self.settings.step_volume(direction)
+            if self.speaker is not None:
+                self.speaker.set_volume(v)
+        elif key[0] == "reveal":
+            self.settings["reveal"] = not self.settings["reveal"]
+            self.revealed = False
+        elif key[0] == "sleep":
+            self.settings.step_sleep(direction)
+        elif key[0] == "level":
+            self.settings.toggle_level(key[1], key[2])
+        self.show_settings()
+        if key[0] == "volume" and self.speaker is not None and self.settings["volume"]:
+            self.speaker.beep(ms=120)
 
     # --- lifecycle ---------------------------------------------------------------
 
@@ -429,7 +586,7 @@ class App:
     def init_speaker(self):
         try:
             import audio
-            self.speaker = audio.Speaker()
+            self.speaker = audio.Speaker(volume=self.settings["volume"])
             self.speaker.on_chunk = self.poll_buttons
         except Exception as e:
             sys.print_exception(e)

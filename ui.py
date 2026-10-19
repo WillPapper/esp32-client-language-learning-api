@@ -126,11 +126,17 @@ def _header(fb, fonts, left, middle, right, state=None):
         x += fonts.small.width(pct) + 6
     x = draw_wifi(fb, x, (HEADER_H - WIFI_H) // 2, state.get("online"))
     if left:
-        nfont.draw(fb, fonts.small, left, x, y, ink=WHITE)
-    if middle:
-        nfont.draw_centered(fb, fonts.small, middle, y, ink=WHITE, w=WIDTH)
+        x = nfont.draw(fb, fonts.small, left, x, y, ink=WHITE)
+    right_x = WIDTH - MARGIN
     if right:
-        nfont.draw_right(fb, fonts.small, right, WIDTH - MARGIN, y, ink=WHITE)
+        right_x = nfont.draw_right(fb, fonts.small, right, WIDTH - MARGIN, y, ink=WHITE) - fonts.small.width(right)
+    if middle:
+        # Centred when it fits between the left and right texts, else pushed right of the left
+        # text and shortened.
+        room = right_x - 12 - (x + 12)
+        middle = nfont.fit(fonts.small, middle, room)
+        mx = max(x + 12, (WIDTH - fonts.small.width(middle)) // 2)
+        nfont.draw(fb, fonts.small, middle, mx, y, ink=WHITE)
 
 
 def _footer(fb, fonts, text):
@@ -202,23 +208,66 @@ def draw_word(fb, fonts, word, language, position, total, status=None, state=Non
         meaning = meaning + "  (" + pos + ")"
     y = _lines(fb, fonts.body, meaning, y, limit, 2, centered=True)
 
-    for s in word.get("sentences") or []:
-        block = _sentence_block(fonts, language, s)
+    sentences = word.get("sentences") or []
+    if sentences:
+        # One example sentence: the one chosen at random when the word was fetched (its
+        # audio is what a tap plays); hold "down" cycles to the next.
+        index = word.get("sentence", 0) % len(sentences)
+        block = _sentence_block(fonts, language, sentences[index])
         height = 10 + sum(font.height * len(lines) for font, lines in block)
-        if y + height > limit:
-            break  # only whole sentences
-        y += 4
-        fb.hline(MARGIN + 40, y, WIDTH - 2 * (MARGIN + 40), BLACK)
-        y += 6
-        for font, lines in block:
-            for line in lines:
-                nfont.draw(fb, font, line, MARGIN, y)
-                y += font.height
+        if y + height <= limit:
+            y += 4
+            fb.hline(MARGIN + 40, y, WIDTH - 2 * (MARGIN + 40), BLACK)
+            if len(sentences) > 1:
+                nfont.draw_right(fb, fonts.small, "%d/%d" % (index + 1, len(sentences)), WIDTH - MARGIN,
+                                 y - fonts.small.height // 2)
+            y += 6
+            for font, lines in block:
+                for line in lines:
+                    nfont.draw(fb, font, line, MARGIN, y)
+                    y += font.height
 
     if status:
         _footer(fb, fonts, status)
     else:
         _footer(fb, fonts, "▲ next   ▼ back   ● speak   hold ● for " + LANGUAGE_NAME_EN[OTHER[language]])
+
+
+def draw_settings(fb, fonts, rows, cursor, state=None):
+    """The settings list. `rows` is [(label, value, checked)]: `value` is text drawn at the
+    right, or None; `checked` draws a checkbox instead (True/False), or None for no box. The
+    row under `cursor` is inverted. Rows scroll so the cursor stays visible."""
+    fb.fill(WHITE)
+    _header(fb, fonts, "Settings", None, None, state)
+    row_h = fonts.body.height + 6
+    top = HEADER_H + 4
+    visible = (HEIGHT - FOOTER_H - top - 2) // row_h
+    first = max(0, min(cursor - visible + 1, len(rows) - visible)) if cursor >= visible else 0
+    y = top
+    for i in range(first, min(len(rows), first + visible)):
+        label, value, checked = rows[i]
+        selected = i == cursor
+        ink = WHITE if selected else BLACK
+        if selected:
+            fb.fill_rect(MARGIN - 6, y, WIDTH - 2 * (MARGIN - 6), row_h, BLACK)
+        ty = y + 3
+        nfont.draw(fb, fonts.body, label, MARGIN, ty, ink=ink)
+        if value is not None:
+            nfont.draw_right(fb, fonts.body, value, WIDTH - MARGIN, ty, ink=ink)
+        elif checked is not None:
+            size = 14
+            bx = WIDTH - MARGIN - size
+            by = y + (row_h - size) // 2
+            fb.rect(bx, by, size, size, ink)
+            if checked:
+                fb.fill_rect(bx + 3, by + 3, size - 6, size - 6, ink)
+        y += row_h
+    _footer(fb, fonts, "▲▼ move   ● change   hold ● back   ▲+▼ save")
+    fy = HEIGHT - FOOTER_H + (FOOTER_H - fonts.small.height) // 2
+    if first > 0:
+        nfont.draw(fb, fonts.small, "▲", 2, fy)
+    if first + visible < len(rows):
+        nfont.draw_right(fb, fonts.small, "▼", WIDTH - 2, fy)
 
 
 def draw_message(fb, fonts, title, lines, footer=None, state=None):
