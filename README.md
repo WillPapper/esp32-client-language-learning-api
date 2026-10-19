@@ -16,9 +16,13 @@ MicroPython.
 | Up + down together       | Open or close the settings screen                                      |
 
 Only one language is on screen at a time. A card shows the word, its reading (kana and romaji,
-or pinyin), the meaning and part of speech, and one example sentence with its reading and
-translation. The sentence is picked at random when the word is fetched (every word has two or
-four), and its audio is what a tap plays; the small `2/4` by the divider says which one is up.
+or pinyin), the meaning and part of speech, and below a divider one example sentence with its
+reading(s) and translation. The sentence is picked at random when the word is fetched (every
+word has two or four) and its audio is what a tap plays. The area below the divider scrolls:
+when the whole sentence block does not fit, the divider says `▼ more` and "down" shows the next
+screenful; at the end it says `2/4  ▼ next` and "down" moves to the next sentence from its top.
+The header shows the level lists the word on screen belongs to (with an ellipsis if they do not
+fit), the battery and the Wi-Fi state.
 
 **Controls page**: the first row of the settings list, "Controls", opens a page that lists
 every gesture above. Any button returns to settings.
@@ -46,7 +50,7 @@ uv tool install mpremote            # or: pip install mpremote
 cp wifi_secrets.example.py wifi_secrets.py   # then fill in SSID and PASSWORD (2.4 GHz only)
 tools/deploy.sh --fonts             # first install: code + 6.8 MB of fonts, a few minutes
 tools/deploy.sh                     # later: code only
-mpremote connect /dev/cu.usbmodem2101 repl   # watch the log; Ctrl-C stops the app
+uv run --with pyserial python tools/log.py   # watch the log (or: mpremote connect /dev/cu.usbmodem2101 repl)
 ```
 
 `wifi_secrets.py` is git-ignored. The API base URL is in `api.py`.
@@ -76,7 +80,9 @@ installed.
 | `fonts/` | Noto Sans CJK JP and SC rendered to bitmaps at 40, 22 and 16 px (SIL OFL 1.1) |
 | `tools/deploy.sh` | Copy everything to the device and reset it |
 | `tools/build_font.py` | Render Noto Sans CJK into the `fonts/*.nf1` files |
-| `tools/preview.py` | Render a card to PNG on a Mac with a `framebuf` shim, for layout work |
+| `tools/preview.py` | Render any screen to PNG on a Mac with a `framebuf` shim, for layout work |
+| `tools/log.py` | Print the device's serial output without interrupting the app (mpremote's `exec`/`run`/`cp` all send Ctrl-C) |
+| `AGENTS.md`, `CLAUDE.md` | How to work on this codebase: the edit/deploy/watch loop and the pitfalls |
 
 ## How it works
 
@@ -136,12 +142,18 @@ installed.
   the cable also wakes it for one header redraw. After 30 idle minutes on battery it shows a
   "powered off" card and drops the battery latch (GPIO 17), as the stock firmware does after
   five; `main.py` raises the latch first thing at boot so the power button only needs a short
-  hold. On USB power the app never sleeps or powers off, which also keeps the USB console
-  alive for `tools/deploy.sh` (light sleep disconnects the USB serial port). Idle draw is not
-  measured; awake, expect tens of milliamps, mostly the Wi-Fi radio.
+  hold (this power-on path is the stock firmware's and is not yet tested with this app; USB
+  power always revives the unit). On USB power the app never sleeps or powers off, which also
+  keeps the USB console alive for `tools/deploy.sh` (light sleep disconnects the USB serial
+  port). Idle draw is not measured; awake, expect tens of milliamps, mostly the Wi-Fi radio.
 - **Preview on a Mac.** `uv run --with pillow python tools/preview.py ja out.png` draws a live
-  random word with the real `ui.py`; pass a saved JSON response as a third argument, or
-  `--message` for the start-up screen.
+  random word with the real `ui.py`; pass a saved JSON response (`curl .../ja/words/1326`) as a
+  third argument. Flags: `--hidden` and `--pinyin` for the reveal-mode stages, `--scroll=N` to
+  start the sentence area at line N, `--settings`, `--info` (the controls page) and `--message`
+  (the start-up screen). This is the only test harness: look at the PNG before deploying.
+- **Working on the code.** See `AGENTS.md`: the deploy and log loop, what interrupts the app,
+  and the things that have bitten before (secrets, pad holds, audio start-up order, the API
+  changing shape).
 
 ## Hardware notes
 
