@@ -70,6 +70,21 @@ def _lines(fb, font, text, y, limit, max_lines, centered=False, x=MARGIN):
     return y
 
 
+def _sentence_block(fonts, language, s):
+    """[(font, lines)] for one example sentence: text, its reading(s), translation."""
+    max_w = WIDTH - 2 * MARGIN
+    block = [(fonts.body, nfont.wrap(fonts.body, s.get("characters") or "", max_w)[:2])]
+    if language == "zh":
+        readings = [s.get("pinyin")]
+    else:
+        readings = [s.get("kana"), s.get("romaji")]
+    for text in readings:
+        if text:
+            block.append((fonts.small, nfont.wrap(fonts.small, text, max_w)[:2]))
+    block.append((fonts.small, nfont.wrap(fonts.small, s.get("translation") or "", max_w)[:2]))
+    return block
+
+
 def draw_word(fb, fonts, word, language, position, total, status=None):
     """Lay out one vocabulary card. `position` is 0-based within `total` words seen."""
     fb.fill(WHITE)
@@ -96,17 +111,18 @@ def draw_word(fb, fonts, word, language, position, total, status=None):
         meaning = meaning + "  (" + pos + ")"
     y = _lines(fb, fonts.body, meaning, y, limit, 2, centered=True)
 
-    sentences = word.get("sentences") or []
-    if sentences and y + 8 + fonts.body.height <= limit:
+    for s in word.get("sentences") or []:
+        block = _sentence_block(fonts, language, s)
+        height = 10 + sum(font.height * len(lines) for font, lines in block)
+        if y + height > limit:
+            break  # only whole sentences
         y += 4
         fb.hline(MARGIN + 40, y, WIDTH - 2 * (MARGIN + 40), BLACK)
         y += 6
-        s = sentences[0]
-        y = _lines(fb, fonts.body, s.get("characters") or "", y, limit, 2)
-        s_reading = reading_of(language, s)
-        if s_reading:
-            y = _lines(fb, fonts.small, s_reading, y, limit, 2)
-        y = _lines(fb, fonts.small, s.get("translation") or "", y, limit, 2)
+        for font, lines in block:
+            for line in lines:
+                nfont.draw(fb, font, line, MARGIN, y)
+                y += font.height
 
     if status:
         _footer(fb, fonts, status)
