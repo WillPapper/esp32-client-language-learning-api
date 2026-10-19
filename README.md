@@ -6,7 +6,7 @@ MicroPython.
 
 | Button                   | Action                                                                 |
 | ------------------------ | ---------------------------------------------------------------------- |
-| Up (GPIO 39)             | Next word. At the end of the history, fetches a new random word from the API. In reveal mode the first press shows the hidden card |
+| Up (GPIO 39)             | Next word. At the end of the history, fetches a new random word from the API. In reveal mode the first press reveals the card (Mandarin: pinyin first, then everything on the second press) |
 | Down (GPIO 18)           | Previous word                                                          |
 | Main, tap (GPIO 0)       | Speak the word, then after a 0.5 s pause the example sentence on screen (the API's text-to-speech WAVs). A tap while speaking stops it |
 | Main, double tap         | The same at slow speed, once the API serves slow audio (`audio.slowUrl`); until then normal speed with a note in the footer. A tap right after stopping playback also plays the slow version |
@@ -28,7 +28,7 @@ changes it the other way, up + down again saves and closes.
 | Volume | 0-100 % in steps of 10; a short beep plays the new level |
 | Reveal mode | on/off, same as holding "up" |
 | Sleep after | 1, 2, 5, 10 or 30 minutes idle, or never (see Power) |
-| Level checkboxes | One row per level label the API reports for each language (`GET /:language/levels`, with word counts). Checked levels are sent as `?level=A,B` on word fetches; none checked means every word |
+| Word levels | One checkbox per level label the API reports for the language on screen (`GET /:language/levels`, with word counts); switch language on a card first to see the other list. All are checked until you uncheck some; the checked ones are sent as `?level=A,B` on word fetches, and checking them all again clears the filter |
 
 Settings are saved to `settings.json` on the device and survive resets and deploys.
 

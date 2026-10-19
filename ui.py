@@ -173,10 +173,14 @@ def _sentence_block(fonts, language, s):
     return block
 
 
-def draw_word(fb, fonts, word, language, position, total, status=None, state=None, hidden=False):
-    """Lay out one vocabulary card. `position` is 0-based within `total` words seen. With
-    `hidden` (reveal mode) only the headword is drawn, with its reading and meaning hidden
-    until the next "up" press."""
+REVEAL_STAGES = {"ja": 1, "zh": 2}  # presses of "up" to reveal a card fully in reveal mode
+
+
+def draw_word(fb, fonts, word, language, position, total, status=None, state=None, stage=None):
+    """Lay out one vocabulary card. `position` is 0-based within `total` words seen. `stage`
+    is the reveal-mode stage: 0 draws only the headword, 1 the headword and its reading
+    (Mandarin: pinyin before the meaning, so characters and pronunciation can be tested
+    separately), None or REVEAL_STAGES[language] the whole card."""
     fb.fill(WHITE)
     pos = word.get("partOfSpeech") or ""
     _header(fb, fonts, LANGUAGE_NAME[language], levels_of(word), "%d / %d" % (position + 1, total), state)
@@ -184,13 +188,19 @@ def draw_word(fb, fonts, word, language, position, total, status=None, state=Non
     limit = HEIGHT - FOOTER_H - 2
     y = HEADER_H + 6
     head = word.get("characters") or ""
-    if hidden:
-        y = (HEIGHT - FOOTER_H - fonts.big.height) // 2 - 10
+    if stage is not None and stage < REVEAL_STAGES[language]:
+        reading = reading_of(language, word) if stage >= 1 else ""
+        block_h = fonts.big.height + (fonts.body.height + 4 if reading else 0)
+        y = (HEIGHT - FOOTER_H - block_h) // 2 - 10
         if fonts.big.width(head) <= WIDTH - 2 * MARGIN:
             nfont.draw_centered(fb, fonts.big, head, y, w=WIDTH)
+            y += fonts.big.height
         else:
-            _lines(fb, fonts.body, head, y, limit, 3, centered=True)
-        _footer(fb, fonts, status or "▲ reveal   ▼ back   ● speak   hold ▼ to exit")
+            y = _lines(fb, fonts.body, head, y, limit, 3, centered=True)
+        if reading:
+            _lines(fb, fonts.body, reading, y + 4, limit, 1, centered=True)
+        what = "▲ reveal" if stage + 1 >= REVEAL_STAGES[language] else "▲ pinyin"
+        _footer(fb, fonts, status or what + "   ▼ back   ● speak   hold ▲ to exit")
         return
     if fonts.big.width(head) <= WIDTH - 2 * MARGIN:
         nfont.draw_centered(fb, fonts.big, head, y, w=WIDTH)
@@ -235,8 +245,9 @@ def draw_word(fb, fonts, word, language, position, total, status=None, state=Non
 
 def draw_settings(fb, fonts, rows, cursor, state=None):
     """The settings list. `rows` is [(label, value, checked)]: `value` is text drawn at the
-    right, or None; `checked` draws a checkbox instead (True/False), or None for no box. The
-    row under `cursor` is inverted. Rows scroll so the cursor stays visible."""
+    right, or None; `checked` draws a checkbox instead (True/False), or None for no box. A row
+    with neither is a section heading, drawn small. The row under `cursor` is inverted. Rows
+    scroll so the cursor stays visible."""
     fb.fill(WHITE)
     _header(fb, fonts, "Settings", None, None, state)
     row_h = fonts.body.height + 6
@@ -251,6 +262,12 @@ def draw_settings(fb, fonts, rows, cursor, state=None):
         if selected:
             fb.fill_rect(MARGIN - 6, y, WIDTH - 2 * (MARGIN - 6), row_h, BLACK)
         ty = y + 3
+        if value is None and checked is None:  # heading
+            nfont.draw(fb, fonts.small, nfont.fit(fonts.small, label, WIDTH - 2 * MARGIN), MARGIN,
+                       y + row_h - fonts.small.height - 2)
+            fb.hline(MARGIN, y + row_h - 1, WIDTH - 2 * MARGIN, BLACK)
+            y += row_h
+            continue
         nfont.draw(fb, fonts.body, label, MARGIN, ty, ink=ink)
         if value is not None:
             nfont.draw_right(fb, fonts.body, value, WIDTH - MARGIN, ty, ink=ink)

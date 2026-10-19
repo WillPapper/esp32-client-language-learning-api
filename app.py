@@ -72,7 +72,7 @@ class App:
         self.levels = {lang: None for lang in LANGUAGES}  # [{"level", "words"}] from the API
         self.mode = "cards"  # or "settings"
         self.cursor = 0  # selected settings row
-        self.revealed = False  # reveal mode: the current card's details are showing
+        self.revealed = 0  # reveal mode: how much of the current card is showing (ui.REVEAL_STAGES)
         self.history = {lang: [] for lang in LANGUAGES}
         self.position = {lang: -1 for lang in LANGUAGES}
         self.speaker = None
@@ -130,9 +130,9 @@ class App:
         t = time.ticks_ms()
         state = self.state()
         self._status_shown = self._status_seen = self._status_key(state)
-        hidden = self.settings["reveal"] and not self.revealed
+        stage = self.revealed if self.settings["reveal"] else None
         ui.draw_word(self.epd, self.fonts[self.language], word, self.language,
-                     self.position[self.language], len(self.history[self.language]), status, state, hidden)
+                     self.position[self.language], len(self.history[self.language]), status, state, stage)
         drew = time.ticks_diff(time.ticks_ms(), t)
         kind = self.epd.show(full=full)
         print("drew in %d ms, %s refresh in %d ms" % (drew, kind, time.ticks_diff(time.ticks_ms(), t) - drew))
@@ -330,11 +330,11 @@ class App:
         new random words are all the same to the user, so only one is fetched."""
         if delta == 0:
             return
-        if self.settings["reveal"] and delta > 0 and not self.revealed:
-            self.revealed = True  # the first "up" on a hidden card reveals it
+        if self.settings["reveal"] and delta > 0 and self.revealed < ui.REVEAL_STAGES[self.language]:
+            self.revealed += 1  # "up" on a hidden card reveals the next part (zh: pinyin, then all)
             self.show()
             return
-        self.revealed = False
+        self.revealed = 0
         pos = self.position[self.language]
         last = len(self.history[self.language]) - 1
         if delta < 0:
@@ -363,19 +363,19 @@ class App:
         if n < 2:
             return
         word["sentence"] = (word.get("sentence", 0) + 1) % n
-        self.revealed = True
+        self.revealed = ui.REVEAL_STAGES[self.language]
         self.show()
 
     def toggle_reveal(self, on=None):
         self.settings["reveal"] = (not self.settings["reveal"]) if on is None else on
         self.settings.save()
-        self.revealed = False
+        self.revealed = 0
         print("reveal mode:", self.settings["reveal"])
         self.show("Reveal mode on: ▲ shows the answer" if self.settings["reveal"] else "Reveal mode off")
 
     def toggle_language(self):
         self.language = ui.OTHER[self.language]
-        self.revealed = False
+        self.revealed = 0
         print("language:", self.language)
         if not self.history[self.language]:
             self.fetch()
@@ -515,24 +515,43 @@ class App:
 
     # --- settings screen ---------------------------------------------------------
 
+    def known_levels(self, lang):
+        known = self.levels[lang]
+        if known is None:
+            known = [{"level": name, "words": None} for name in KNOWN_LEVELS[lang]]
+        return known
+
     def settings_rows(self):
-        """[(key, label, value, checked)] for ui.draw_settings, in display order."""
+        """[(key, label, value, checked)] for ui.draw_settings, in display order. Only the
+        current language's levels are listed; with no filter saved they all show as checked."""
         st = self.settings
+        lang = self.language
         rows = [(("volume",), "Volume", "%d %%" % st["volume"], None),
                 (("reveal",), "Reveal mode", "on" if st["reveal"] else "off", None),
-                (("sleep",), "Sleep after", ("%d min" % st["sleep_min"]) if st["sleep_min"] else "never", None)]
-        for lang in LANGUAGES:
-            chosen = st.levels(lang)
-            known = self.levels[lang]
-            if known is None:
-                known = [{"level": name, "words": None} for name in KNOWN_LEVELS[lang]]
-            for item in known:
-                name = item["level"]
-                label = "%s  %s" % (ui.LANGUAGE_NAME[lang], name)
-                if item.get("words"):
-                    label += "  (%d)" % item["words"]
-                rows.append((("level", lang, name), label, None, name in chosen))
+                (("sleep",), "Sleep after", ("%d min" % st["sleep_min"]) if st["sleep_min"] else "never", None),
+                (None, "%s levels  (switch language on a card first)" % ui.LANGUAGE_NAME_EN[lang],
+                 None, None)]
+        chosen = st.levels(lang)
+        for item in self.known_levels(lang):
+            name = item["level"]
+            label = name
+            if item.get("words"):
+                label += "  (%d words)" % item["words"]
+            rows.append((("level", lang, name), label, None, not chosen or name in chosen))
         return rows
+
+    def toggle_level(self, lang, name):
+        """Uncheck or check one level. No saved filter means every level; unchecking one from
+        there keeps the others, and checking the last one back clears the filter again."""
+        known = [item["level"] for item in self.known_levels(lang)]
+        chosen = self.settings.levels(lang) or list(known)
+        if name in chosen:
+            chosen.remove(name)
+        else:
+            chosen.append(name)
+        if not chosen or all(level in chosen for level in known):
+            chosen = []
+        self.settings["levels"][lang] = chosen
 
     def show_settings(self):
         rows = [(label, value, checked) for _, label, value, checked in self.settings_rows()]
@@ -564,7 +583,10 @@ class App:
             self.close_settings()
             return
         if event in (UP, DOWN):
-            self.cursor = (self.cursor + (-1 if event == UP else 1)) % len(rows)
+            step = -1 if event == UP else 1
+            self.cursor = (self.cursor + step) % len(rows)
+            while rows[self.cursor][0] is None:  # skip headings
+                self.cursor = (self.cursor + step) % len(rows)
             self.show_settings()
             return
         if event not in (SPEAK, TOGGLE):
@@ -577,11 +599,11 @@ class App:
                 self.speaker.set_volume(v)
         elif key[0] == "reveal":
             self.settings["reveal"] = not self.settings["reveal"]
-            self.revealed = False
+            self.revealed = 0
         elif key[0] == "sleep":
             self.settings.step_sleep(direction)
         elif key[0] == "level":
-            self.settings.toggle_level(key[1], key[2])
+            self.toggle_level(key[1], key[2])
         self.show_settings()
         if key[0] == "volume" and self.speaker is not None and self.settings["volume"]:
             self.speaker.beep(ms=120)

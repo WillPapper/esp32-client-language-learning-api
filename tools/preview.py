@@ -4,7 +4,8 @@
     uv run --with pillow python tools/preview.py zh out.png          # a random word from the live API
     uv run --with pillow python tools/preview.py ja out.png word.json # a saved API response
     uv run --with pillow python tools/preview.py ja out.png --message
-    uv run --with pillow python tools/preview.py ja out.png --hidden   # reveal mode, before the reveal
+    uv run --with pillow python tools/preview.py zh out.png --hidden   # reveal mode, headword only
+    uv run --with pillow python tools/preview.py zh out.png --pinyin   # reveal mode, after the first press
     uv run --with pillow python tools/preview.py ja out.png --settings
 
 Run from the repository root so the fonts/ directory is found.
@@ -37,10 +38,10 @@ def main(argv):
     rest = [a for a in argv[3:] if not a.startswith("--")]
     if "--settings" in flags:
         rows = [("Volume", "80 %", None), ("Reveal mode", "off", None), ("Sleep after", "2 min", None),
-                ("日本語  N5  (24)", None, True), ("日本語  N2  (500)", None, False), ("日本語  N1  (500)", None, False),
-                ("中文  HSK1  (158)", None, True), ("中文  HSK2  (2)", None, False), ("中文  HSK3.0-1  (508)", None, True),
-                ("中文  HSK2025-1  (600)", None, False)]
-        ui.draw_settings(fb, fonts, rows, 6, state)
+                ("Mandarin levels  (switch language on a card first)", None, None),
+                ("HSK1  (158 words)", None, True), ("HSK2  (2 words)", None, False),
+                ("HSK3.0-1  (508 words)", None, True), ("HSK2025-1  (600 words)", None, True)]
+        ui.draw_settings(fb, fonts, rows, 5, state)
     elif "--message" in flags:
         state["battery"] = {"percent": 20, "charging": False, "full": False, "mv": 3600}
         state["online"] = False
@@ -56,7 +57,7 @@ def main(argv):
         print(json.dumps(word, ensure_ascii=False)[:300])
         word["sentence"] = 1
         ui.draw_word(fb, fonts, word, language, 2, 5, rest[1] if len(rest) > 1 else None,
-                     state=state, hidden="--hidden" in flags)
+                     state=state, stage=0 if "--hidden" in flags else 1 if "--pinyin" in flags else None)
     fb.to_image().save(out)
     print("wrote", out)
 

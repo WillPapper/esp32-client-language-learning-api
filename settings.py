@@ -47,15 +47,6 @@ class Settings:
     def levels(self, language):
         return list(self.data["levels"].get(language) or [])
 
-    def toggle_level(self, language, level):
-        chosen = self.levels(language)
-        if level in chosen:
-            chosen.remove(level)
-        else:
-            chosen.append(level)
-        self.data["levels"][language] = chosen
-        return level in chosen
-
     def step_volume(self, direction):
         v = self.data["volume"] + VOLUME_STEP * direction
         self.data["volume"] = max(0, min(100, v))
