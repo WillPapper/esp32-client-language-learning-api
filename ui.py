@@ -41,11 +41,20 @@ def reading_of(language, item):
     return kana or romaji
 
 
+def levels_of(word):
+    """The word's level labels as one string ("N5", "HSK1 · HSK3.0-1"). Older API responses
+    had a single `level` string."""
+    levels = word.get("levels")
+    if levels is None:
+        levels = [word["level"]] if word.get("level") else []
+    return " · ".join(levels)
+
+
 def texts_of(fonts, word, language):
     """Every (font, text) pair draw_word() will need, so the glyphs can be cached ahead of time."""
     out = [(fonts.big, word.get("characters") or ""), (fonts.body, reading_of(language, word)),
            (fonts.body, (word.get("meaning") or "") + (word.get("partOfSpeech") or "")),
-           (fonts.small, (word.get("level") or "") + "0123456789 /")]
+           (fonts.small, levels_of(word) + "0123456789 /%:")]
     for s in word.get("sentences") or []:
         out.append((fonts.body, s.get("characters") or ""))
         out.append((fonts.small, (s.get("kana") or "") + (s.get("romaji") or "") + (s.get("pinyin") or "")
@@ -82,11 +91,42 @@ def draw_battery(fb, x, y, battery, ink=WHITE):
     return x + BATTERY_W + 6
 
 
-def _header(fb, fonts, left, middle, right, battery=None):
+WIFI_W = 13
+WIFI_H = 12
+
+
+def draw_wifi(fb, x, y, online, ink=WHITE):
+    """Four rising signal bars; when offline, a cross instead. `online` None draws nothing."""
+    if online is None:
+        return x
+    if online:
+        for i in range(4):
+            h = 3 + 3 * i
+            fb.fill_rect(x + 3 * i + (1 if i else 0), y + WIFI_H - h, 2, h, ink)
+    else:
+        for i in range(WIFI_H - 2):
+            fb.pixel(x + 1 + i, y + 1 + i, ink)
+            fb.pixel(x + 2 + i, y + 1 + i, ink)
+            fb.pixel(x + WIFI_W - 2 - i, y + 1 + i, ink)
+            fb.pixel(x + WIFI_W - 3 - i, y + 1 + i, ink)
+    return x + WIFI_W + 6
+
+
+def _header(fb, fonts, left, middle, right, state=None):
+    """Black title bar. `state` holds "battery" (battery.Battery.read()) and "online" (bool, or
+    None to draw no Wi-Fi glyph); either may be missing."""
+    state = state or {}
     fb.fill_rect(0, 0, WIDTH, HEADER_H, BLACK)
     y = (HEADER_H - fonts.small.height) // 2
+    battery = state.get("battery")
     x = draw_battery(fb, MARGIN, (HEADER_H - BATTERY_H) // 2, battery)
-    nfont.draw(fb, fonts.small, left, x, y, ink=WHITE)
+    if battery:
+        pct = "%d%%" % battery.get("percent", 0)
+        nfont.draw(fb, fonts.small, pct, x - 2, y, ink=WHITE)
+        x += fonts.small.width(pct) + 6
+    x = draw_wifi(fb, x, (HEADER_H - WIFI_H) // 2, state.get("online"))
+    if left:
+        nfont.draw(fb, fonts.small, left, x, y, ink=WHITE)
     if middle:
         nfont.draw_centered(fb, fonts.small, middle, y, ink=WHITE, w=WIDTH)
     if right:
@@ -127,16 +167,25 @@ def _sentence_block(fonts, language, s):
     return block
 
 
-def draw_word(fb, fonts, word, language, position, total, status=None, battery=None):
-    """Lay out one vocabulary card. `position` is 0-based within `total` words seen."""
+def draw_word(fb, fonts, word, language, position, total, status=None, state=None, hidden=False):
+    """Lay out one vocabulary card. `position` is 0-based within `total` words seen. With
+    `hidden` (reveal mode) only the headword is drawn, with its reading and meaning hidden
+    until the next "up" press."""
     fb.fill(WHITE)
-    level = word.get("level") or ""
     pos = word.get("partOfSpeech") or ""
-    _header(fb, fonts, LANGUAGE_NAME[language], level, "%d / %d" % (position + 1, total), battery)
+    _header(fb, fonts, LANGUAGE_NAME[language], levels_of(word), "%d / %d" % (position + 1, total), state)
 
     limit = HEIGHT - FOOTER_H - 2
     y = HEADER_H + 6
     head = word.get("characters") or ""
+    if hidden:
+        y = (HEIGHT - FOOTER_H - fonts.big.height) // 2 - 10
+        if fonts.big.width(head) <= WIDTH - 2 * MARGIN:
+            nfont.draw_centered(fb, fonts.big, head, y, w=WIDTH)
+        else:
+            _lines(fb, fonts.body, head, y, limit, 3, centered=True)
+        _footer(fb, fonts, status or "▲ reveal   ▼ back   ● speak   hold ▼ to exit")
+        return
     if fonts.big.width(head) <= WIDTH - 2 * MARGIN:
         nfont.draw_centered(fb, fonts.big, head, y, w=WIDTH)
         y += fonts.big.height
@@ -172,10 +221,10 @@ def draw_word(fb, fonts, word, language, position, total, status=None, battery=N
         _footer(fb, fonts, "▲ next   ▼ back   ● speak   hold ● for " + LANGUAGE_NAME_EN[OTHER[language]])
 
 
-def draw_message(fb, fonts, title, lines, footer=None, battery=None):
+def draw_message(fb, fonts, title, lines, footer=None, state=None):
     """A plain screen: a title bar, then up to a few lines of text."""
     fb.fill(WHITE)
-    _header(fb, fonts, title, None, None, battery)
+    _header(fb, fonts, title, None, None, state)
     y = HEADER_H + 24
     for text in lines:
         y = _lines(fb, fonts.body, text, y, HEIGHT - FOOTER_H, 3)

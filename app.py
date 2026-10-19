@@ -50,10 +50,12 @@ class App:
         self.position = {lang: -1 for lang in LANGUAGES}
         self.speaker = None
         self.speaker_error = None
+        self.wlan = None
         self.battery = battery.Battery()
-        self._battery_shown = None  # (charging, full, percent // 10) as last drawn
-        self._battery_seen = None  # the same, as read in the last two checks
-        self._battery_checked = 0
+        self.online = False  # Wi-Fi connected, as last seen by the thread or the main loop
+        self._status_shown = None  # (charging, full, percent // 10, online) as last drawn
+        self._status_seen = None  # the same, as read in the last two checks
+        self._status_checked = 0
         self.up = buttons.Button(buttons.PIN_UP)
         self.down = buttons.Button(buttons.PIN_DOWN)
         self.main = buttons.Button(buttons.PIN_MAIN)
@@ -72,8 +74,14 @@ class App:
 
     # --- display -----------------------------------------------------------------
 
+    def state(self):
+        """What the header shows besides the title: battery and Wi-Fi."""
+        return {"battery": self.battery.read(), "online": self.online}
+
     def message(self, title, lines, footer=None):
-        ui.draw_message(self.epd, self.fonts[self.language], title, lines, footer, self.battery.read())
+        state = self.state()
+        self._status_shown = self._status_seen = self._status_key(state)
+        ui.draw_message(self.epd, self.fonts[self.language], title, lines, footer, state)
         self.epd.show()
         gc.collect()
 
@@ -83,8 +91,8 @@ class App:
             self.message("Language cards", ["No word loaded."], status)
             return
         t = time.ticks_ms()
-        state = self.battery.read()
-        self._battery_shown = self._battery_seen = self._battery_key(state)
+        state = self.state()
+        self._status_shown = self._status_seen = self._status_key(state)
         ui.draw_word(self.epd, self.fonts[self.language], word, self.language,
                      self.position[self.language], len(self.history[self.language]), status, state)
         drew = time.ticks_diff(time.ticks_ms(), t)
@@ -98,8 +106,27 @@ class App:
         h = self.history[self.language]
         return h[self.position[self.language]] if h else None
 
+    def _ensure_online(self):
+        """Reconnect Wi-Fi if it dropped. Runs in the thread, so the buttons stay responsive;
+        the header's Wi-Fi glyph follows self.online."""
+        if self.wlan.isconnected():
+            self.online = True
+            return True
+        self.online = False
+        try:
+            with self.net_lock:
+                wifi.connect(timeout_ms=15_000)
+            self.online = True
+            print("Wi-Fi: reconnected")
+        except OSError as e:
+            print("Wi-Fi:", e)
+            time.sleep(5)
+        return self.online
+
     def _prefetch_loop(self):
         while True:
+            if not self._ensure_online():
+                continue
             for lang in (self.language, ui.OTHER[self.language]):
                 with self.lock:
                     needed = self.prefetched[lang] is None and not self.fetching[lang]
@@ -300,27 +327,28 @@ class App:
         finally:
             self.speaker.amp_off()
 
-    # --- battery -----------------------------------------------------------------
+    # --- header status (battery, Wi-Fi) --------------------------------------------
 
     @staticmethod
-    def _battery_key(state):
-        return (state["charging"], state["full"], state["percent"] // 10)
+    def _status_key(state):
+        b = state["battery"]
+        return (b["charging"], b["full"], b["percent"] // 10, state["online"])
 
-    def check_battery(self):
-        """Every 500 ms, read the battery; redraw the card when the charging state or the
-        10 % step has been different from what is shown for two reads in a row (1 s)."""
+    def check_status(self):
+        """Every 500 ms, read the battery and Wi-Fi state; redraw the card when the USB state,
+        the 10 % step or the connection has differed from what is shown for two reads (1 s)."""
         now = time.ticks_ms()
-        if time.ticks_diff(now, self._battery_checked) < 500:
+        if time.ticks_diff(now, self._status_checked) < 500:
             return
-        self._battery_checked = now
-        key = self._battery_key(self.battery.read())
-        if key == self._battery_shown:
-            self._battery_seen = key
+        self._status_checked = now
+        key = self._status_key(self.state())
+        if key == self._status_shown:
+            self._status_seen = key
             return
-        if key == self._battery_seen:
-            print("battery changed:", key)
+        if key == self._status_seen:
+            print("status changed:", key)
             self.handle(self.show)
-        self._battery_seen = key
+        self._status_seen = key
 
     # --- buttons -----------------------------------------------------------------
 
@@ -358,7 +386,8 @@ class App:
         self.message("Language cards", ["Connecting to Wi-Fi…"])
         while True:
             try:
-                wifi.connect()
+                self.wlan = wifi.connect()
+                self.online = True
                 return
             except OSError as e:
                 print("Wi-Fi:", e)
@@ -409,7 +438,7 @@ class App:
                 self.process_pending()
             else:
                 self.warm_glyphs()
-                self.check_battery()
+                self.check_status()
             # Slow the CPU down while there is nothing to do; the prefetch thread and glyph
             # warming run at full speed so they finish quickly.
             with self.lock:

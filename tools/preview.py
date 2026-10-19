@@ -4,6 +4,7 @@
     uv run --with pillow python tools/preview.py zh out.png          # a random word from the live API
     uv run --with pillow python tools/preview.py ja out.png word.json # a saved API response
     uv run --with pillow python tools/preview.py ja out.png --message
+    uv run --with pillow python tools/preview.py ja out.png --hidden   # reveal mode, before the reveal
 
 Run from the repository root so the fonts/ directory is found.
 """
@@ -30,19 +31,24 @@ def main(argv):
     language, out = argv[1], argv[2]
     fonts = ui.Fonts(language)
     fb = framebuf.FrameBuffer(bytearray(ui.WIDTH * ui.HEIGHT // 8), ui.WIDTH, ui.HEIGHT, framebuf.MONO_HLSB)
-    if len(argv) > 3 and argv[3] == "--message":
-        ui.draw_message(fb, fonts, "Language cards", ["Connecting to Wi-Fi…"],
-                        battery={"percent": 20, "charging": False, "full": False, "mv": 3600})
+    state = {"battery": {"percent": 63, "charging": True, "full": False, "mv": 3780}, "online": True}
+    flags = [a for a in argv[3:] if a.startswith("--")]
+    rest = [a for a in argv[3:] if not a.startswith("--")]
+    if "--message" in flags:
+        state["battery"] = {"percent": 20, "charging": False, "full": False, "mv": 3600}
+        state["online"] = False
+        ui.draw_message(fb, fonts, "Language cards", ["Connecting to Wi-Fi…"], state=state)
     else:
-        if len(argv) > 3:
-            with open(argv[3], encoding="utf-8") as f:
+        if rest:
+            with open(rest[0], encoding="utf-8") as f:
                 word = json.load(f)
         else:
-            with urllib.request.urlopen(BASE_URL + "/%s/word" % language, timeout=20) as r:
+            req = urllib.request.Request(BASE_URL + "/%s/word" % language, headers={"User-Agent": "note4-preview"})
+            with urllib.request.urlopen(req, timeout=20) as r:
                 word = json.load(r)
         print(json.dumps(word, ensure_ascii=False)[:300])
-        ui.draw_word(fb, fonts, word, language, 2, 5, argv[4] if len(argv) > 4 else None,
-                     battery={"percent": 63, "charging": True, "full": False, "mv": 3780})
+        ui.draw_word(fb, fonts, word, language, 2, 5, rest[1] if len(rest) > 1 else None,
+                     state=state, hidden="--hidden" in flags)
     fb.to_image().save(out)
     print("wrote", out)
 
