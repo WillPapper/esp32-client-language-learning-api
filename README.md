@@ -20,8 +20,9 @@ or pinyin), the meaning and part of speech, and one example sentence with its re
 translation. The sentence is picked at random when the word is fetched (every word has two or
 four), and its audio is what a tap plays; the small `2/4` by the divider says which one is up.
 
-**Settings** (up + down together): up/down move, tap changes a value, hold the main button
-changes it the other way, up + down again saves and closes.
+**Settings** (up + down together): up/down move, the main button changes the selected row
+(the footer says how: tap for louder or longer, hold for quieter or shorter; tap toggles
+reveal mode or a level checkbox), up + down again saves and closes.
 
 | Setting | |
 | ------- | - |

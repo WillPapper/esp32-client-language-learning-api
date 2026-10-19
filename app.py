@@ -553,11 +553,17 @@ class App:
             chosen = []
         self.settings["levels"][lang] = chosen
 
+    HINTS = {"volume": "● louder   hold ● quieter", "sleep": "● longer   hold ● shorter",
+             "reveal": "● on / off", "level": "● check / uncheck"}
+
     def show_settings(self):
-        rows = [(label, value, checked) for _, label, value, checked in self.settings_rows()]
+        all_rows = self.settings_rows()
+        rows = [(label, value, checked) for _, label, value, checked in all_rows]
+        key = all_rows[self.cursor][0]
+        hint = self.HINTS.get(key[0] if key else None, "● change")
         state = self.state()
         self._status_shown = self._status_seen = self._status_key(state)
-        ui.draw_settings(self.epd, self.fonts[self.language], rows, self.cursor, state)
+        ui.draw_settings(self.epd, self.fonts[self.language], rows, self.cursor, state, hint)
         self.epd.show()
         gc.collect()
 

@@ -243,11 +243,11 @@ def draw_word(fb, fonts, word, language, position, total, status=None, state=Non
         _footer(fb, fonts, "▲ next   ▼ back   ● speak   hold ● for " + LANGUAGE_NAME_EN[OTHER[language]])
 
 
-def draw_settings(fb, fonts, rows, cursor, state=None):
+def draw_settings(fb, fonts, rows, cursor, state=None, hint="● change"):
     """The settings list. `rows` is [(label, value, checked)]: `value` is text drawn at the
     right, or None; `checked` draws a checkbox instead (True/False), or None for no box. A row
     with neither is a section heading, drawn small. The row under `cursor` is inverted. Rows
-    scroll so the cursor stays visible."""
+    scroll so the cursor stays visible. `hint` says what the main button does on that row."""
     fb.fill(WHITE)
     _header(fb, fonts, "Settings", None, None, state)
     row_h = fonts.body.height + 6
@@ -279,7 +279,7 @@ def draw_settings(fb, fonts, rows, cursor, state=None):
             if checked:
                 fb.fill_rect(bx + 3, by + 3, size - 6, size - 6, ink)
         y += row_h
-    _footer(fb, fonts, "▲▼ move   ● change   hold ● back   ▲+▼ save")
+    _footer(fb, fonts, "▲▼ move   " + hint + "   ▲+▼ save")
     # Scroll hints: small arrows in the right margin by the first and last visible rows
     if first > 0:
         _small_arrow(fb, WIDTH - 7, top + 4, up=True)
