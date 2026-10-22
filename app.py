@@ -3,9 +3,11 @@
     Up button (GPIO 39)     next word; a new random word when at the end of the history
     Down button (GPIO 18)   scroll the sentence area, then the next example sentence
     Main button tap (GPIO 0) speak the word, then after a short pause its first example sentence
-    Main button double tap  the same, slowly (once the API serves slow audio)
-    Main button tap while speaking   stop; a second tap right after plays the slow version
+    Main button double tap  the same, slowly
     Main button hold        switch between Japanese and Mandarin (each keeps its own history)
+
+Playback always runs to the end (a word and one sentence, a few seconds); taps on the main
+button while it plays are ignored, other presses are queued and handled afterwards.
     Up button hold          reveal mode on/off (cards show only the headword until "up")
     Down button hold        previous word
     Up + down together      open or close the settings screen (levels, volume, reveal, sleep)
@@ -96,9 +98,8 @@ class App:
         self._active_at = time.ticks_ms()  # last button event, for the sleep timers
         self._woke_at = None  # end of the last sleep; Wi-Fi gets a grace period before the glyph
         self.sleeping = False
-        self.speaking = False  # inside speak(); a main-button tap then cancels instead of queueing
+        self.speaking = False  # inside speak(); main-button taps are ignored meanwhile
         self._tap_at = None  # ticks of a first tap, waiting DOUBLE_TAP_MS for a second one
-        self._cancelled_at = None  # ticks when a tap stopped playback (a quick second tap = slow)
         self.epd.on_wait = self.poll_buttons
         # Prefetch state, shared with the background thread.
         self.prefetched = {lang: None for lang in LANGUAGES}
@@ -420,8 +421,6 @@ class App:
         self.speaking = True
         try:
             for i, url in enumerate(urls):
-                if self.speaker.cancelled:
-                    break
                 keep = i < len(urls) - 1  # amp stays on through the 0.5 s pause between clips
                 with self.lock:
                     data = self.audio_cache.get(url)
@@ -494,11 +493,7 @@ class App:
         elif down == buttons.HOLD:
             self.pending.append(DOWN_HOLD)
         if main == buttons.TAP:
-            if self.speaking and self.speaker is not None:
-                self.speaker.cancel()
-                self._cancelled_at = time.ticks_ms()
-                print("speak: cancelled")
-            else:
+            if not self.speaking:  # a tap during playback is dropped, not queued as a replay
                 self.pending.append(SPEAK)
         elif main == buttons.HOLD:
             self.pending.append(TOGGLE)
@@ -528,13 +523,11 @@ class App:
             elif event == SETTINGS:
                 self.handle(self.open_settings)
             elif event == SPEAK:
-                now = time.ticks_ms()
-                if self._tap_at is not None or (
-                        self._cancelled_at is not None and time.ticks_diff(now, self._cancelled_at) < DOUBLE_TAP_MS):
-                    self._tap_at = self._cancelled_at = None
+                if self._tap_at is not None:
+                    self._tap_at = None
                     self.handle(lambda: self.speak(slow=True))
                 else:
-                    self._tap_at = now  # wait for a possible second tap
+                    self._tap_at = time.ticks_ms()  # wait for a possible second tap
             elif event == TOGGLE:
                 self.handle(self.toggle_language)
 

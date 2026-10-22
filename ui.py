@@ -351,7 +351,6 @@ CONTROLS = (
     ("▲ (reveal mode)", "reveal: pinyin, then all"),
     ("●", "speak word and sentence"),
     ("● ●", "speak slowly"),
-    ("● while speaking", "stop  (● again: slow)"),
     ("hold ●", "Japanese  /  Mandarin"),
     ("hold ▲", "reveal mode on  /  off"),
     ("▲ + ▼", "settings"),

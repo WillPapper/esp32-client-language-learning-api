@@ -16,7 +16,7 @@ backup and a dated log of everything done to the device.
     │   ├── app.py                     the state machine: buttons, modes, prefetch thread, sleep
     │   ├── ui.py                      screens as pure drawing (also runs on the Mac)
     │   ├── api.py                     the only module that knows API URLs and shapes
-    │   ├── audio.py, es8311.py        speaker: I2S + codec, WAV streaming, cancel
+    │   ├── audio.py, es8311.py        speaker: I2S + codec, WAV streaming
     │   ├── buttons.py, battery.py, wifi.py, note4_epd.py, nfont.py, settings.py
     │   ├── wifi_secrets.py            git-ignored credentials (template: wifi_secrets.example.py)
     │   ├── fonts/*.nf1                bitmap fonts; on the device in /fonts, rarely re-uploaded
@@ -97,8 +97,7 @@ the cable in while developing.
 
 ## Verified on the device
 
-Wi-Fi, first word, partial/full refresh timings, speech (the user hears it), tap-to-cancel
-plumbing, the sleep/wake cycle (sleep, wake on a press, codec re-init, Wi-Fi reconnect in
+Wi-Fi, first word, partial/full refresh timings, speech (the user hears it), the sleep/wake cycle (sleep, wake on a press, codec re-init, Wi-Fi reconnect in
 about 6 s, fetch, speak). **Not verified by an agent:** power-on after the 30-minute power-off
 (needs the cable out). The down button (GPIO 18) is the hardware power button: Zectrix's
 reference demo documents it as "DOWN / power button", the stock firmware waits for GPIO 18 to

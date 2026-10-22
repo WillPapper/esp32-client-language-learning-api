@@ -82,19 +82,12 @@ class Speaker:
         self._in = bytearray(CHUNK)
         self._out = bytearray(CHUNK * 2)
         self.on_chunk = None  # optional callback run between chunks (e.g. to poll buttons)
-        self.cancelled = False  # set by cancel(); play_pcm() stops at the next chunk
-
-    def cancel(self):
-        """Stop the clip being played (from on_chunk or another thread). The audio already in
-        the DMA buffer, up to 128 ms, still plays out."""
-        self.cancelled = True
 
     def set_volume(self, percent):
         self.volume = percent
         self.codec.set_volume(percent)
 
     def _start(self):
-        self.cancelled = False
         self.amp(1)
 
     def _stop(self, keep_amp):
@@ -102,7 +95,7 @@ class Speaker:
         # bus keeps looping silence afterwards. With keep_amp (another clip follows) enough is
         # queued for a GAP_MS pause before it.
         self.i2s.write(self._silence)
-        if keep_amp and not self.cancelled:
+        if keep_amp:
             for _ in range(GAP_MS * RATE * 4 // 1000 // IBUF):
                 self.i2s.write(self._silence)
         if not keep_amp:
@@ -133,8 +126,6 @@ class Speaker:
                 total += n
                 if self.on_chunk:
                     self.on_chunk()
-                if self.cancelled:
-                    break
         finally:
             self._stop(keep_amp)
         return total

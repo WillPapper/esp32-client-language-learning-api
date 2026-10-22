@@ -8,8 +8,8 @@ MicroPython.
 | ------------------------ | ---------------------------------------------------------------------- |
 | Up (GPIO 39)             | Next word. At the end of the history, fetches a new random word from the API. In reveal mode the first press reveals the card (Mandarin: pinyin first, then everything on the second press) |
 | Down (GPIO 18)           | Scroll the sentence area down a page when it says "▼ more"; otherwise the word's next example sentence (cycles) |
-| Main, tap (GPIO 0)       | Speak the word, then after a 0.5 s pause the example sentence on screen (the API's text-to-speech WAVs). A tap while speaking stops it |
-| Main, double tap         | The same at slow speed (the API's `audio.slow`, the voice's own 0.75× delivery). Words without slow audio yet play at normal speed with a note in the footer. A tap right after stopping playback also plays the slow version |
+| Main, tap (GPIO 0)       | Speak the word, then after a 0.5 s pause the example sentence on screen (the API's text-to-speech WAVs). Playback always runs to the end; taps while it plays are ignored, other presses are handled afterwards |
+| Main, double tap         | The same at slow speed (the API's `audio.slow`, the voice's own 0.75× delivery). Words without slow audio yet play at normal speed with a note in the footer |
 | Main, hold (≥ 0.6 s)     | Switch between Japanese and Mandarin. Each language keeps its own history |
 | Up, hold                 | Reveal mode on/off: cards show only the headword until "up" is pressed |
 | Down, hold               | Previous word                                                          |
