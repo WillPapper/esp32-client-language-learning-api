@@ -423,7 +423,6 @@ class App:
             self.show("No audio for this word yet")
             return
         self.speaking = True
-        self.speaker.blink_ms = 250 if (slow and not note) else 0  # LED: solid normal, flashing slow
         try:
             for i, url in enumerate(urls):
                 keep = i < len(urls) - 1  # amp stays on through the 0.5 s pause between clips
@@ -434,6 +433,7 @@ class App:
                     n = self.speaker.play_wav_bytes(data, keep_amp=keep)
                     print("played", n, "bytes from RAM in", time.ticks_diff(time.ticks_ms(), t), "ms")
                     continue
+                self.speaker.led_loading()  # flashes until the stream starts playing
                 with self.net_lock:
                     body, length, response = api.open_audio(url)
                     try:

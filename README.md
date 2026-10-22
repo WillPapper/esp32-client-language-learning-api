@@ -9,7 +9,7 @@ MicroPython.
 | Up (GPIO 39)             | Next word. At the end of the history, fetches a new random word from the API. In reveal mode the first press reveals the card (Mandarin: pinyin first, then everything on the second press) |
 | Down (GPIO 18)           | Scroll the sentence area down a page when it says "▼ more"; otherwise the word's next example sentence (cycles) |
 | Main, tap (GPIO 0)       | Speak the word, then after a 0.5 s pause the example sentence on screen (the API's text-to-speech WAVs). Playback always runs to the end; taps while it plays are ignored, other presses are handled afterwards |
-| Main, double tap         | The same at slow speed (the API's `audio.slow`, the voice's own 0.75× delivery); the LED flashes instead of staying lit. Words without slow audio yet play at normal speed with a note in the footer |
+| Main, double tap         | The same at slow speed (the API's `audio.slow`, the voice's own 0.75× delivery). Words without slow audio yet play at normal speed with a note in the footer |
 | Main, hold (≥ 0.6 s)     | Switch between Japanese and Mandarin. Each language keeps its own history |
 | Up, hold                 | Reveal mode on/off: cards show only the headword until "up" is pressed |
 | Down, hold               | Previous word                                                          |
@@ -120,10 +120,11 @@ installed.
   keeps running (looping silence between clips) because the codec's state machine needs its
   clock to finish powering up: initialising the codec and only then starting I2S per clip gave
   no sound. GPIO 42 powers the codec and GPIO 46 enables the amplifier (only while playing);
-  the front LED (GPIO 3, active low) is lit exactly while the amplifier is on, so it shows
-  when the device is speaking and goes out when the last clip has played: solid for normal
-  speed, flashing (4 Hz) for the slow version, dimmed by PWM to 10 % duty
-  (`LED_BRIGHTNESS` in `audio.py`; at full duty it is glaring);
+  the front LED (GPIO 3, active low) flashes (4 Hz) while a clip still has to be fetched
+  from the API, is solid while a clip plays, and goes out when the last clip has played;
+  clips already in RAM start at once, so the flash is only seen for words not yet prefetched.
+  It is dimmed by PWM to 10 % duty (`LED_BRIGHTNESS` in `audio.py`; at full duty it is
+  glaring);
   both are pad-held by the stock firmware, so the driver passes `hold=` explicitly. Volume is
   `audio.Speaker(volume=...)`, 100 = 0 dB at the DAC; the API's files are normalised to
   -20 dBFS RMS.
