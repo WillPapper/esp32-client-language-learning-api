@@ -129,7 +129,11 @@ installed.
   the idle loop checks them every 0.5 s: when the USB state, the 10 % step or the connection
   differs from what is shown for two reads in a row, the card is redrawn (one partial refresh,
   about a second after plugging or unplugging the cable). If Wi-Fi drops, the prefetch thread
-  reconnects on its own; the cross goes away when it has.
+  reconnects on its own; the cross goes away when it has. The middle of the header lists the
+  word's own level labels (`levels`), space-separated; when they do not all fit (three HSK
+  labels at a high battery percentage), whole labels are kept and the rest counted, as in
+  `HSK1 HSK2025-1 +1`. A reading ending in `*` (`dì*`) is the API's heteronym marker: the characters have
+  another reading too, so the recording may carry that one. It is shown as the API sends it.
 - **Power.** While nothing is queued and the prefetch thread is idle, the main loop drops the
   CPU to 80 MHz and goes back to 240 MHz when work arrives. On battery, after the "sleep
   after" setting (default 2 min) with no presses, the app turns Wi-Fi and the codec off and

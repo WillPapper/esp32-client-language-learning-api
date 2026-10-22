@@ -41,20 +41,39 @@ def reading_of(language, item):
     return kana or romaji
 
 
-def levels_of(word):
-    """The word's level labels as one string ("N5", "HSK1 · HSK3.0-1"). Older API responses
-    had a single `level` string."""
+def level_list(word):
+    """The word's level labels (["HSK1", "HSK3.0-1"]). Older API responses had one `level`."""
     levels = word.get("levels")
     if levels is None:
         levels = [word["level"]] if word.get("level") else []
-    return " · ".join(levels)
+    return list(levels)
+
+
+def levels_of(word):
+    """The labels as one string ("N5", "HSK1 HSK2025-1 HSK3.0-1"), for glyph caching."""
+    return " ".join(level_list(word))
+
+
+def _fit_labels(font, labels, max_w):
+    """As many whole labels as fit in max_w, space-separated, then "+N" for the rest
+    ("HSK1 HSK2025-1 +1") rather than an ellipsis in the middle of a label."""
+    shown = []
+    for i, label in enumerate(labels):
+        rest = len(labels) - i - 1
+        text = " ".join(shown + [label]) + (" +%d" % rest if rest else "")
+        if font.width(text) > max_w:
+            break
+        shown.append(label)
+    if len(shown) == len(labels):
+        return " ".join(shown)
+    return nfont.fit(font, " ".join(shown + ["+%d" % (len(labels) - len(shown))]), max_w)
 
 
 def texts_of(fonts, word, language):
     """Every (font, text) pair draw_word() will need, so the glyphs can be cached ahead of time."""
     out = [(fonts.big, word.get("characters") or ""), (fonts.body, reading_of(language, word)),
            (fonts.body, (word.get("meaning") or "") + (word.get("partOfSpeech") or "")),
-           (fonts.small, levels_of(word) + "0123456789 /%:")]
+           (fonts.small, levels_of(word) + "0123456789 /%:+")]
     for s in word.get("sentences") or []:
         out.append((fonts.body, s.get("characters") or ""))
         out.append((fonts.small, (s.get("kana") or "") + (s.get("romaji") or "") + (s.get("pinyin") or "")
@@ -132,8 +151,10 @@ def _header(fb, fonts, left, middle, right, state=None):
         right_x = nfont.draw_right(fb, fonts.small, right, WIDTH - MARGIN, y, ink=WHITE) - fonts.small.width(right)
     if middle:
         # Centred when it fits between the left and right texts, else pushed right of the left
-        # text and shortened.
-        room = right_x - 12 - (x + 12)
+        # text and shortened. A list is level labels: whole labels are kept, the rest counted.
+        room = right_x - 8 - (x + 8)
+        if isinstance(middle, (list, tuple)):
+            middle = _fit_labels(fonts.small, middle, room)
         middle = nfont.fit(fonts.small, middle, room)
         mx = max(x + 12, (WIDTH - fonts.small.width(middle)) // 2)
         nfont.draw(fb, fonts.small, middle, mx, y, ink=WHITE)
@@ -191,7 +212,7 @@ def draw_word(fb, fonts, word, language, position, total, status=None, state=Non
     so the caller can scroll on by a page or move to the next sentence."""
     fb.fill(WHITE)
     pos = word.get("partOfSpeech") or ""
-    _header(fb, fonts, LANGUAGE_NAME[language], levels_of(word), "%d / %d" % (position + 1, total), state)
+    _header(fb, fonts, LANGUAGE_NAME[language], level_list(word), "%d / %d" % (position + 1, total), state)
 
     limit = HEIGHT - FOOTER_H - 2
     y = HEADER_H + 6

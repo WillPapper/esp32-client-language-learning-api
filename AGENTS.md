@@ -5,6 +5,35 @@ and how it works; this file is about how to work on it. The parent folder's `NOT
 (if you have the parent checkout) holds the hardware facts, the pin map, the stock-firmware
 backup and a dated log of everything done to the device.
 
+## Where things are
+
+```
+~/Dropbox/esp32/                       local git repo, no remote; CLAUDE.md there is a one-liner
+└── NOTE4/
+    ├── AGENTS.md, CLAUDE.md           hardware facts, pin map, device log; read before touching pins
+    ├── esp32-client-language-learning-api/   THIS repo (GitHub remote); everything below is here
+    │   ├── main.py                    boot entry: holds GPIO 17 (battery latch), then app.main()
+    │   ├── app.py                     the state machine: buttons, modes, prefetch thread, sleep
+    │   ├── ui.py                      screens as pure drawing (also runs on the Mac)
+    │   ├── api.py                     the only module that knows API URLs and shapes
+    │   ├── audio.py, es8311.py        speaker: I2S + codec, WAV streaming, cancel
+    │   ├── buttons.py, battery.py, wifi.py, note4_epd.py, nfont.py, settings.py
+    │   ├── wifi_secrets.py            git-ignored credentials (template: wifi_secrets.example.py)
+    │   ├── fonts/*.nf1                bitmap fonts; on the device in /fonts, rarely re-uploaded
+    │   └── tools/                     Mac-side only, never deployed:
+    │       deploy.sh                  copy code + secrets, reset
+    │       log.py                     passive serial reader
+    │       preview.py, framebuf.py    render any screen to PNG with a framebuf shim
+    │       build_font.py              render Noto Sans CJK into fonts/*.nf1
+    ├── language-learning-api/         the API (Cloudflare Worker), its own repo; git pull often
+    ├── micropython/                   the first Hello World and the downloaded firmware image
+    ├── reference/                     upstream sources (board package, ES8311 driver, fonts)
+    └── *.bin, SHA256SUMS.txt          stock-firmware backups; never delete
+```
+
+On the device the flat layout is the same minus `tools/`, plus `settings.json` and `boot.py`.
+`README.md`'s Files table says what each module does in more detail.
+
 ## The loop
 
 1. Edit on the Mac. There is no test suite; `ui.py` and `nfont.py` run unchanged on the Mac,
@@ -39,6 +68,12 @@ the cable in while developing.
   response shape. Shapes that have already changed under this client: `audio.url` became
   absolute; `level` became a `levels` list; `audio` became `{"normal": ..., "slow": ...}`;
   `?level=` accepts comma-separated lists. `api.py` is the only module that knows URLs.
+  Additive changes seen since (harmless, but know they exist): `heteronym: true` with a `*`
+  appended to the reading; a `sources` list per word; up to three level labels per word
+  (`levels_of` joins them with single spaces so they fit the header). A quick check that
+  nothing broke: `curl -s -A note4 "$BASE/zh/word" | python3 -m json.tool` and look for
+  `levels`, `audio.normal.url`, `audio.slow.url`, `sentences[].audio`, `pinyin`/`kana`;
+  then `tools/preview.py` with the saved JSON. Python's urllib needs a `User-Agent` (403).
 - **Pad holds.** GPIO 3, 6, 17, 42 and 46 may be pad-held by earlier firmware; a `Pin(...)`
   without `hold=` silently does nothing on them. Always pass `hold=True` or `hold=False`.
 - **Audio order.** The I2S bus must be running before the ES8311 is initialised and must keep
@@ -66,7 +101,8 @@ Wi-Fi, first word, partial/full refresh timings, speech (the user hears it), tap
 plumbing, the sleep/wake cycle (sleep, wake on a press, codec re-init, Wi-Fi reconnect in
 about 6 s, fetch, speak). **Not verified:** power-on after the 30-minute power-off (needs the
 cable out; the assumption is the stock behaviour, hold the front button about a second), and
-slow audio playback end to end (the API had almost no slow clips when this was written).
+slow audio playback end to end (as of 2026-10-21 the API has normal and slow clips for every
+sampled word and sentence in both languages, so a double tap on any card tests it).
 
 ## Conventions
 
