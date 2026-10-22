@@ -3,7 +3,7 @@ import sys
 from machine import Pin
 
 # Hold the battery latch high first: after a power-off (GPIO 17 low) the unit runs from the
-# power button only until this line, so a short press is enough to turn it on.
+# buttons only until this line, so pressing up + down together briefly is enough to turn it on.
 Pin(17, Pin.OUT, value=1, hold=True)
 
 import app

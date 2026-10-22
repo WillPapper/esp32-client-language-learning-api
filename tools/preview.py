@@ -9,6 +9,7 @@
     uv run --with pillow python tools/preview.py ja out.png --settings
     uv run --with pillow python tools/preview.py zh out.png --info      # the controls page
     uv run --with pillow python tools/preview.py ja out.png word.json --scroll=3   # sentence area scrolled
+    uv run --with pillow python tools/preview.py ja out.png --off       # the card left after power-off
 
 Run from the repository root so the fonts/ directory is found.
 """
@@ -63,7 +64,11 @@ def main(argv):
         for f in flags:
             if f.startswith("--scroll="):
                 word["scroll"] = int(f[9:])
-        ui.draw_word(fb, fonts, word, language, 2, 5, rest[1] if len(rest) > 1 else None,
+        status = rest[1] if len(rest) > 1 else None
+        if "--off" in flags:
+            state["online"] = False
+            status = "Powered off   press ▲ + ▼ together to turn on"
+        ui.draw_word(fb, fonts, word, language, 2, 5, status,
                      state=state, stage=0 if "--hidden" in flags else 1 if "--pinyin" in flags else None)
     fb.to_image().save(out)
     print("wrote", out)

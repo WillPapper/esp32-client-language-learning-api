@@ -99,8 +99,9 @@ the cable in while developing.
 
 Wi-Fi, first word, partial/full refresh timings, speech (the user hears it), tap-to-cancel
 plumbing, the sleep/wake cycle (sleep, wake on a press, codec re-init, Wi-Fi reconnect in
-about 6 s, fetch, speak). **Not verified:** power-on after the 30-minute power-off (needs the
-cable out; the assumption is the stock behaviour, hold the front button about a second), and
+about 6 s, fetch, speak). **Not verified by an agent:** power-on after the 30-minute power-off
+(needs the cable out; the user's instruction is that pressing up + down together turns the
+unit on, which is what the powered-off footer says; the app has no code for it), and
 slow audio playback end to end (as of 2026-10-21 the API has normal and slow clips for every
 sampled word and sentence in both languages, so a double tap on any card tests it).
 

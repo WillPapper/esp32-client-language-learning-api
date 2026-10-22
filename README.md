@@ -143,17 +143,19 @@ installed.
   an image. Any press wakes it: the press itself is handled right away from the prefetched
   word and audio, the codec is re-initialised (about 0.2 s) and Wi-Fi reconnects in the
   background (about 6 s, during which the header keeps its signal bars). Plugging or unplugging
-  the cable also wakes it for one header redraw. After 30 idle minutes on battery it shows a
-  "powered off" card and drops the battery latch (GPIO 17), as the stock firmware does after
-  five; `main.py` raises the latch first thing at boot so the power button only needs a short
-  hold (this power-on path is the stock firmware's and is not yet tested with this app; USB
+  the cable also wakes it for one header redraw. After 30 idle minutes on battery it drops the
+  battery latch (GPIO 17), as the stock firmware does after five. The card stays on the panel
+  (it needs no power to hold an image) with its footer replaced by "Powered off   press ▲ + ▼
+  together to turn on". Turning on is the hardware's doing, not this app's: `main.py` raises
+  the latch first thing at boot so the buttons only need to be held until the app starts (USB
   power always revives the unit). On USB power the app never sleeps or powers off, which also
   keeps the USB console alive for `tools/deploy.sh` (light sleep disconnects the USB serial
   port). Idle draw is not measured; awake, expect tens of milliamps, mostly the Wi-Fi radio.
 - **Preview on a Mac.** `uv run --with pillow python tools/preview.py ja out.png` draws a live
   random word with the real `ui.py`; pass a saved JSON response (`curl .../ja/words/1326`) as a
   third argument. Flags: `--hidden` and `--pinyin` for the reveal-mode stages, `--scroll=N` to
-  start the sentence area at line N, `--settings`, `--info` (the controls page) and `--message`
+  start the sentence area at line N, `--off` (the card left on the panel after power-off),
+  `--settings`, `--info` (the controls page) and `--message`
   (the start-up screen). This is the only test harness: look at the PNG before deploying.
 - **Working on the code.** See `AGENTS.md`: the deploy and log loop, what interrupts the app,
   and the things that have bitten before (secrets, pad holds, audio start-up order, the API

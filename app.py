@@ -17,7 +17,8 @@ Power: on battery, after the "sleep after" setting (default 2 min) of no presses
 Wi-Fi and the codec off and light-sleeps in 100 ms slices, polling the buttons and the charger
 pins between slices (the card stays on the e-paper). Any press wakes it; Wi-Fi reconnects in
 the background. After POWER_OFF_MIN idle on battery it drops the battery latch (GPIO 17) and
-powers off like the stock firmware. On USB power it never sleeps, which also keeps the USB
+powers off like the stock firmware; the card stays on the panel with a footer saying to press
+up and down together to turn it on. On USB power it never sleeps, which also keeps the USB
 console alive for deploys.
 
 Responsiveness: a background thread keeps one random word prefetched per language and
@@ -60,6 +61,7 @@ DOUBLE_TAP_MS = 350  # a second tap within this window of the first makes a doub
 IDLE_MHZ = 80
 BUSY_MHZ = 240
 SLEEP_SLICE_MS = 100  # light-sleep length between button polls (wake latency)
+POWER_OFF_HINT = "Powered off   press ▲ + ▼ together to turn on"  # footer left on the panel
 POWER_OFF_MIN = 30  # minutes idle on battery before powering off
 
 
@@ -705,8 +707,8 @@ class App:
         from machine import Pin
         print("power off: idle for %d min" % POWER_OFF_MIN)
         self.mode = "cards"
-        self.message("Language cards", ["Powered off after %d idle minutes." % POWER_OFF_MIN,
-                                        "Hold ● to turn on."])
+        # The card stays on the panel; only the footer changes, to say how to turn it on.
+        self.show(status=POWER_OFF_HINT, full=True)
         Pin(audio.PIN_AUDIO_PWR, Pin.OUT, value=0, hold=True)
         Pin(note4_epd.PIN_VBAT_PWR, Pin.OUT, value=0, hold=True)
         time.sleep(3)
