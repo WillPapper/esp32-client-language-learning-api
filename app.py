@@ -419,6 +419,7 @@ class App:
             self.show("No audio for this word yet")
             return
         self.speaking = True
+        self.speaker.blink_ms = 250 if (slow and not note) else 0  # LED: solid normal, flashing slow
         try:
             for i, url in enumerate(urls):
                 keep = i < len(urls) - 1  # amp stays on through the 0.5 s pause between clips

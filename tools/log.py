@@ -20,20 +20,28 @@ import serial
 PORT = os.environ.get("PORT", "/dev/cu.usbmodem2101")
 
 
-def main(argv):
-    seconds = float(argv[1]) if len(argv) > 1 else None
+def _open():
     for _ in range(50):  # the port disappears for a few seconds after a reset
         try:
-            port = serial.Serial(PORT, 115200, timeout=0.2)
-            break
+            return serial.Serial(PORT, 115200, timeout=0.2)
         except (OSError, serial.SerialException):
             time.sleep(0.2)
-    else:
-        sys.exit("no device at " + PORT)
+    sys.exit("no device at " + PORT)
+
+
+def main(argv):
+    seconds = float(argv[1]) if len(argv) > 1 else None
+    port = _open()
     end = time.time() + seconds if seconds else None
     try:
         while end is None or time.time() < end:
-            data = port.read(4096)
+            try:
+                data = port.read(4096)
+            except (OSError, serial.SerialException):
+                # The device re-enumerated (a reset right after we opened it): reopen.
+                port.close()
+                port = _open()
+                continue
             if data:
                 sys.stdout.write(data.decode("utf-8", "replace"))
                 sys.stdout.flush()

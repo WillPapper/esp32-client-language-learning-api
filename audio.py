@@ -15,7 +15,7 @@ clock is present. Creating the I2S per clip after the codec init gave no sound a
 import micropython
 import struct
 import time
-from machine import I2C, I2S, Pin
+from machine import I2C, I2S, Pin, PWM
 
 import es8311
 
@@ -26,6 +26,8 @@ PIN_I2S_WS = 38
 PIN_I2S_DOUT = 45  # ESP32 -> codec DAC
 PIN_AUDIO_PWR = 42  # high = codec powered
 PIN_AMP_EN = 46  # high = speaker amplifier on
+PIN_LED = 3  # the front LED, active low; on while the amplifier is on (speaking)
+LED_BRIGHTNESS = 30  # percent duty while lit (PWM); the LED is painfully bright at 100
 
 RATE = 16000
 CHUNK = 2048  # bytes of 16-bit PCM per I2S write (64 ms)
@@ -68,6 +70,9 @@ class Speaker:
     def __init__(self, volume=100):
         Pin(PIN_AUDIO_PWR, Pin.OUT, value=1, hold=True)
         self.amp = Pin(PIN_AMP_EN, Pin.OUT, value=0, hold=False)
+        # hold=False: the stock firmware pad-held this pin. PWM dims it (active low: duty is "off" time).
+        self._led = PWM(Pin(PIN_LED, Pin.OUT, value=1, hold=False), freq=2000, duty_u16=65535)
+        self.blink_ms = 0  # 0: LED solid while speaking; else it flashes with this half-period
         time.sleep_ms(20)
         self._silence = bytearray(IBUF)
         self.i2s = I2S(0, sck=Pin(PIN_I2S_BCLK), ws=Pin(PIN_I2S_WS), sd=Pin(PIN_I2S_DOUT),
@@ -87,8 +92,16 @@ class Speaker:
         self.volume = percent
         self.codec.set_volume(percent)
 
+    def led(self, on):
+        self._led.duty_u16(65535 - LED_BRIGHTNESS * 65535 // 100 if on else 65535)
+
     def _start(self):
         self.amp(1)
+        self.led(True)
+
+    def _led_tick(self):
+        if self.blink_ms:
+            self.led(not ((time.ticks_ms() // self.blink_ms) & 1))
 
     def _stop(self, keep_amp):
         # Queue silence: the write returns once the real samples have left the buffer, and the
@@ -98,14 +111,18 @@ class Speaker:
         if keep_amp:
             for _ in range(GAP_MS * RATE * 4 // 1000 // IBUF):
                 self.i2s.write(self._silence)
+                self._led_tick()
         if not keep_amp:
-            self.amp(0)
+            self.amp_off()
 
     def amp_off(self):
         self.amp(0)
+        self.led(False)
 
     def deinit(self):
-        self.amp(0)
+        self.amp_off()
+        self._led.deinit()
+        Pin(PIN_LED, Pin.OUT, value=1, hold=False)  # off, as a plain output again
         self.codec.standby()
         self.i2s.deinit()
 
@@ -124,6 +141,7 @@ class Speaker:
                 _widen(self._in, self._out, n)
                 self.i2s.write(memoryview(self._out)[: n * 2])
                 total += n
+                self._led_tick()
                 if self.on_chunk:
                     self.on_chunk()
         finally:
