@@ -127,6 +127,9 @@ installed.
   both are pad-held by the stock firmware, so the driver passes `hold=` explicitly. Volume is
   `audio.Speaker(volume=...)`, 100 = 0 dB at the DAC; the API's files are normalised to
   -20 dBFS RMS.
+- **Start-up failures.** If Wi-Fi or the first word cannot be loaded, the message screen
+  counts down to the next attempt (15 s; redrawn every 2 s for Wi-Fi, every 5 s for the API,
+  since each redraw is about a second of panel time) and retries forever.
 - **Header.** Battery icon (filled to the stock firmware's percent curve, a bolt whenever USB
   power is present, charging or full) with the percentage, then a Wi-Fi glyph: signal bars
   when connected, a cross while the link is down. Both are read each time a card is drawn, and
