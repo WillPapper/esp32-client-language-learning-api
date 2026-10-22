@@ -68,6 +68,7 @@ SLEEP_SLICE_MS = 100  # light-sleep length between button polls (wake latency)
 RETRY_S = 15  # wait between attempts when Wi-Fi or the first word fails at start-up
 RETRY_STEP_S = 5  # the countdown redraws this often (a refresh is about a second)
 WIFI_RETRY_STEP_S = 2  # the Wi-Fi failure counts down faster, for feedback while fixing the router
+WIFI_QUICK_RETRY_S = 2  # after the first Wi-Fi failure only (usually a momentary handshake failure)
 POWER_OFF_HINT = "Powered off   hold ▼ to turn on"  # footer left on the panel (▼ is the power button)
 POWER_OFF_MIN = 30  # minutes idle on battery before powering off
 
@@ -717,6 +718,7 @@ class App:
 
     def connect(self):
         self.message("Language cards", ["Connecting to Wi-Fi…"])
+        failures = 0
         while True:
             try:
                 self.wlan = wifi.connect()
@@ -726,8 +728,13 @@ class App:
                 reason = str(e)
                 if reason.startswith("Wi-Fi: "):
                     reason = reason[7:]
-                print("Wi-Fi:", reason)
-                self.retry_countdown(["Wi-Fi failed: " + reason], step=WIFI_RETRY_STEP_S)
+                failures += 1
+                print("Wi-Fi:", reason, "(attempt %d)" % failures)
+                # The ESP32 driver reports "wrong password" for any failed handshake, including a
+                # router slow to answer, and the next attempt usually succeeds: retry the first
+                # failure quickly, and only wait the full RETRY_S after repeated ones.
+                wait = WIFI_QUICK_RETRY_S if failures == 1 else RETRY_S
+                self.retry_countdown(["Wi-Fi failed: " + reason], seconds=wait, step=WIFI_RETRY_STEP_S)
 
     def retry_countdown(self, lines, seconds=RETRY_S, step=RETRY_STEP_S):
         """Show `lines` with "Retrying in N s", counting down in `step` seconds per refresh

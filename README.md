@@ -128,8 +128,12 @@ installed.
   `audio.Speaker(volume=...)`, 100 = 0 dB at the DAC; the API's files are normalised to
   -20 dBFS RMS.
 - **Start-up failures.** If Wi-Fi or the first word cannot be loaded, the message screen
-  counts down to the next attempt (15 s; redrawn every 2 s for Wi-Fi, every 5 s for the API,
-  since each redraw is about a second of panel time) and retries forever.
+  counts down to the next attempt and retries forever. The first Wi-Fi failure is retried
+  after 2 s, because the ESP32 driver reports "wrong password" for any failed handshake
+  (a slow router included) and the next attempt usually succeeds; from the second failure
+  on it waits 15 s, so a real password problem shows as repeated failures. The API retry
+  waits 15 s. Countdowns redraw every 2 s (Wi-Fi) or 5 s (API), since each redraw is about a
+  second of panel time.
 - **Header.** Battery icon (filled to the stock firmware's percent curve, a bolt whenever USB
   power is present, charging or full) with the percentage, then a Wi-Fi glyph: signal bars
   when connected, a cross while the link is down. Both are read each time a card is drawn, and
