@@ -65,6 +65,8 @@ DOUBLE_TAP_MS = 350  # a second tap within this window of the first makes a doub
 IDLE_MHZ = 80
 BUSY_MHZ = 240
 SLEEP_SLICE_MS = 100  # light-sleep length between button polls (wake latency)
+RETRY_S = 15  # wait between attempts when Wi-Fi or the first word fails at start-up
+RETRY_STEP_S = 5  # the countdown redraws this often (a refresh is about a second)
 POWER_OFF_HINT = "Powered off   hold ▼ to turn on"  # footer left on the panel (▼ is the power button)
 POWER_OFF_MIN = 30  # minutes idle on battery before powering off
 
@@ -720,9 +722,21 @@ class App:
                 self.online = True
                 return
             except OSError as e:
-                print("Wi-Fi:", e)
-                self.message("Language cards", ["Wi-Fi failed:", str(e), "Retrying in 15 s…"])
-                time.sleep(15)
+                reason = str(e)
+                if reason.startswith("Wi-Fi: "):
+                    reason = reason[7:]
+                print("Wi-Fi:", reason)
+                self.retry_countdown(["Wi-Fi failed: " + reason])
+
+    def retry_countdown(self, lines, seconds=RETRY_S, step=RETRY_STEP_S):
+        """Show `lines` with "Retrying in N s", counting down in `step` seconds per refresh
+        (each refresh takes about a second of panel time, so not every second)."""
+        left = seconds
+        while left > 0:
+            self.message("Language cards", lines + ["Retrying in %d s…" % left])
+            time.sleep(min(step, left))
+            left -= step
+        self.message("Language cards", lines + ["Retrying…"])
 
     def init_speaker(self):
         try:
@@ -742,8 +756,7 @@ class App:
                 self.fetch()
             except api.ApiError as e:
                 print("API:", e)
-                self.message("Language cards", ["Could not load a word:", str(e), "Retrying in 15 s…"])
-                time.sleep(15)
+                self.retry_countdown(["Could not load a word:", str(e)])
         self.show()
 
     def handle(self, action):

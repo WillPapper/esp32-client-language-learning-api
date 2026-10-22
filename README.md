@@ -122,7 +122,7 @@ installed.
   no sound. GPIO 42 powers the codec and GPIO 46 enables the amplifier (only while playing);
   the front LED (GPIO 3, active low) is lit exactly while the amplifier is on, so it shows
   when the device is speaking and goes out when the last clip has played: solid for normal
-  speed, flashing (4 Hz) for the slow version, dimmed by PWM to 30 % duty
+  speed, flashing (4 Hz) for the slow version, dimmed by PWM to 10 % duty
   (`LED_BRIGHTNESS` in `audio.py`; at full duty it is glaring);
   both are pad-held by the stock firmware, so the driver passes `hold=` explicitly. Volume is
   `audio.Speaker(volume=...)`, 100 = 0 dB at the DAC; the API's files are normalised to

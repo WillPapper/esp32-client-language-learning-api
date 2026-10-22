@@ -27,7 +27,7 @@ PIN_I2S_DOUT = 45  # ESP32 -> codec DAC
 PIN_AUDIO_PWR = 42  # high = codec powered
 PIN_AMP_EN = 46  # high = speaker amplifier on
 PIN_LED = 3  # the front LED, active low; on while the amplifier is on (speaking)
-LED_BRIGHTNESS = 30  # percent duty while lit (PWM); the LED is painfully bright at 100
+LED_BRIGHTNESS = 10  # percent duty while lit (PWM); the LED is painfully bright at 100
 
 RATE = 16000
 CHUNK = 2048  # bytes of 16-bit PCM per I2S write (64 ms)
