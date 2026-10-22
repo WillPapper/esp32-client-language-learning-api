@@ -145,10 +145,14 @@ installed.
   background (about 6 s, during which the header keeps its signal bars). Plugging or unplugging
   the cable also wakes it for one header redraw. After 30 idle minutes on battery it drops the
   battery latch (GPIO 17), as the stock firmware does after five. The card stays on the panel
-  (it needs no power to hold an image) with its footer replaced by "Powered off   press ▲ + ▼
-  together to turn on". Turning on is the hardware's doing, not this app's: `main.py` raises
-  the latch first thing at boot so the buttons only need to be held until the app starts (USB
-  power always revives the unit). On USB power the app never sleeps or powers off, which also
+  (it needs no power to hold an image) with its footer replaced by "Powered off   hold ▼ to
+  turn on". ▼ (GPIO 18) is the hardware power button: holding it powers the board, and
+  `main.py` raises the latch first thing at boot, about a second after power is applied, so
+  the hold only needs to last until then. The press that turned the unit on is ignored (the
+  app waits for every button to be released before it starts polling). ● cannot turn the unit
+  on: it is the BOOT strapping pin, and holding it at power-up puts the chip in the ROM
+  download mode instead of booting. USB power always revives the unit. On USB power the app
+  never sleeps or powers off, which also
   keeps the USB console alive for `tools/deploy.sh` (light sleep disconnects the USB serial
   port). Idle draw is not measured; awake, expect tens of milliamps, mostly the Wi-Fi radio.
 - **Preview on a Mac.** `uv run --with pillow python tools/preview.py ja out.png` draws a live

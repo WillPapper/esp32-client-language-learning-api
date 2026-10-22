@@ -100,8 +100,13 @@ the cable in while developing.
 Wi-Fi, first word, partial/full refresh timings, speech (the user hears it), tap-to-cancel
 plumbing, the sleep/wake cycle (sleep, wake on a press, codec re-init, Wi-Fi reconnect in
 about 6 s, fetch, speak). **Not verified by an agent:** power-on after the 30-minute power-off
-(needs the cable out; the user's instruction is that pressing up + down together turns the
-unit on, which is what the powered-off footer says; the app has no code for it), and
+(needs the cable out). The down button (GPIO 18) is the hardware power button: Zectrix's
+reference demo documents it as "DOWN / power button", the stock firmware waits for GPIO 18 to
+read high after raising the latch (that is, for the power-on press to be released), and the
+user confirmed the front button does nothing (it is the BOOT strap). The user turned the unit
+on with up + down together before the footer said to hold down; down alone is what the
+hardware uses. The app only raises GPIO 17 at boot and ignores buttons held at start. Also
+unverified:
 slow audio playback end to end (as of 2026-10-21 the API has normal and slow clips for every
 sampled word and sentence in both languages, so a double tap on any card tests it).
 

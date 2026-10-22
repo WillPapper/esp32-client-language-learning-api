@@ -17,9 +17,11 @@ Power: on battery, after the "sleep after" setting (default 2 min) of no presses
 Wi-Fi and the codec off and light-sleeps in 100 ms slices, polling the buttons and the charger
 pins between slices (the card stays on the e-paper). Any press wakes it; Wi-Fi reconnects in
 the background. After POWER_OFF_MIN idle on battery it drops the battery latch (GPIO 17) and
-powers off like the stock firmware; the card stays on the panel with a footer saying to press
-up and down together to turn it on. On USB power it never sleeps, which also keeps the USB
-console alive for deploys.
+powers off like the stock firmware; the card stays on the panel with a footer saying to hold
+"down" to turn it on. "Down" (GPIO 18) is the hardware power button: holding it powers the
+board until main.py raises the latch. The press that turned the unit on is ignored (run()
+waits for every button to be released before polling), as the stock firmware does. On USB
+power it never sleeps, which also keeps the USB console alive for deploys.
 
 Responsiveness: a background thread keeps one random word prefetched per language and
 downloads the audio for the current and the next word into RAM, and the main loop warms the
@@ -61,7 +63,7 @@ DOUBLE_TAP_MS = 350  # a second tap within this window of the first makes a doub
 IDLE_MHZ = 80
 BUSY_MHZ = 240
 SLEEP_SLICE_MS = 100  # light-sleep length between button polls (wake latency)
-POWER_OFF_HINT = "Powered off   press ▲ + ▼ together to turn on"  # footer left on the panel
+POWER_OFF_HINT = "Powered off   hold ▼ to turn on"  # footer left on the panel (▼ is the power button)
 POWER_OFF_MIN = 30  # minutes idle on battery before powering off
 
 
@@ -762,6 +764,9 @@ class App:
 
     def run(self):
         self.start()
+        # A button still held from power-on ("down" is the power button) is not a press.
+        for b in (self.up, self.down, self.main):
+            b.wait_release()
         print("ready: up = next, down = sentence, hold down = back, tap = speak, hold = switch language")
         import machine
         mhz = 0

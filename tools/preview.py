@@ -67,7 +67,7 @@ def main(argv):
         status = rest[1] if len(rest) > 1 else None
         if "--off" in flags:
             state["online"] = False
-            status = "Powered off   press ▲ + ▼ together to turn on"
+            status = "Powered off   hold ▼ to turn on"
         ui.draw_word(fb, fonts, word, language, 2, 5, status,
                      state=state, stage=0 if "--hidden" in flags else 1 if "--pinyin" in flags else None)
     fb.to_image().save(out)
